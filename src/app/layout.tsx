@@ -19,13 +19,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${GeistSans.variable} dark`}>
-      <body className="antialiased font-sans bg-background text-foreground">
-        <AppLayout>
+    <html lang="en" className={`${GeistSans.variable} dark`}><body className="antialiased font-sans bg-background text-foreground"><AppLayout>
           {children}
-        </AppLayout>
-        <Toaster />
-      </body>
-    </html>
+        </AppLayout><Toaster /></body></html>
   );
 }
