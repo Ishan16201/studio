@@ -1,0 +1,5 @@
+This is a placeholder for an MP3 file. An actual short notification sound should be placed here.
+For example, a simple "ding" or "chime" sound.
+You can find royalty-free sounds on websites like Pixabay or Freesound.
+Ensure the actual file is named 'pomodoro_notification.mp3' and placed in the 'public/sounds/' directory.
+ID3TAG

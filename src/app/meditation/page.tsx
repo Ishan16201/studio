@@ -1,0 +1,79 @@
+import AudioPlayerComponent from '@/components/meditation/AudioPlayer';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Headphones, Waves } from 'lucide-react';
+import Image from 'next/image';
+
+export const metadata = {
+  title: 'Guided Meditation - Grindset',
+  description: 'Find calm and clarity with guided meditation tracks.',
+};
+
+export default function MeditationPage() {
+  const meditationTracks = [
+    {
+      id: '1',
+      title: '5-Minute Mindful Breathing',
+      description: 'A short practice to center yourself and find calm.',
+      duration: '5 min',
+      audioSrc: '/sounds/sample_meditation_5min.mp3', // Replace with actual audio file
+      coverArt: 'https://placehold.co/400x400.png?text=Mindful+Breathing',
+      aiHint: 'calm nature'
+    },
+    {
+      id: '2',
+      title: '10-Minute Body Scan',
+      description: 'Release tension and connect with your body.',
+      duration: '10 min',
+      audioSrc: '/sounds/sample_meditation_10min.mp3', // Replace with actual audio file
+      coverArt: 'https://placehold.co/400x400.png?text=Body+Scan',
+      aiHint: 'serene landscape'
+    },
+  ];
+
+  return (
+    <div className="container mx-auto max-w-xl p-4 md:p-8">
+      <header className="text-center mb-8">
+         <div className="mx-auto bg-primary/10 text-primary p-4 rounded-full w-fit mb-4 inline-flex">
+            <Waves className="w-12 h-12" />
+         </div>
+        <h1 className="text-3xl md:text-4xl font-bold text-primary">Guided Meditation</h1>
+        <p className="mt-2 text-lg text-muted-foreground">
+          Relax your mind, find your focus.
+        </p>
+      </header>
+
+      <div className="space-y-8">
+        {meditationTracks.map((track) => (
+          <Card key={track.id} className="shadow-xl rounded-xl overflow-hidden">
+            <div className="md:flex">
+              <div className="md:flex-shrink-0">
+                <div className="relative h-48 w-full md:w-48">
+                  <Image 
+                    src={track.coverArt} 
+                    alt={track.title} 
+                    layout="fill" 
+                    objectFit="cover"
+                    data-ai-hint={track.aiHint} 
+                  />
+                </div>
+              </div>
+              <div className="p-6 flex flex-col justify-between flex-grow">
+                <div>
+                  <div className="uppercase tracking-wide text-sm text-accent font-semibold">{track.duration}</div>
+                  <CardTitle className="mt-1 text-xl md:text-2xl font-semibold text-primary">{track.title}</CardTitle>
+                  <CardDescription className="mt-2 text-muted-foreground">{track.description}</CardDescription>
+                </div>
+                <div className="mt-4">
+                   <AudioPlayerComponent audioSrc={track.audioSrc} trackId={track.id} />
+                </div>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+       <p className="text-center text-sm text-muted-foreground mt-12">
+        Take a few moments for yourself. You deserve it.
+      </p>
+    </div>
+  );
+}
