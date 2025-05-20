@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
-import { GeistSans } from 'next/font/google'; // Geist is already sans-serif
+import { GeistSans } from 'geist/font/sans'; // Geist is already sans-serif
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import AppLayout from '@/components/layout/AppLayout'; // Import AppLayout
 
-const geistSans = GeistSans({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-});
+// const geistSans = GeistSans({ // This initialization is not needed for 'geist/font/sans'
+//   variable: '--font-geist-sans',
+//   subsets: ['latin'],
+// });
 
 export const metadata: Metadata = {
   title: 'Grindset',
@@ -25,7 +25,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={geistSans.variable}>
+    <html lang="en" className={GeistSans.variable}>
       <body className="antialiased font-sans">
         <AppLayout>
           {children}
