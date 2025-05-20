@@ -9,7 +9,7 @@ import { useAutosave } from '@/hooks/useAutosave';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const JOURNAL_DOC_PATH = `journal/${USER_ID}/entry`;
+const JOURNAL_DOC_PATH = `journal/${USER_ID}/entry/main`; // Changed path
 
 export default function JournalEditor() {
   const [content, setContent] = useState<string>('');
