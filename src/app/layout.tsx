@@ -19,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${GeistSans.variable} dark`}> {/* Added dark class */}
+    <html lang="en" className={`${GeistSans.variable} dark`}>
       <body className="antialiased font-sans bg-background text-foreground">
         <AppLayout>
           {children}
