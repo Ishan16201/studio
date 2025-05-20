@@ -1,100 +1,159 @@
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, BookOpenText, Timer, ListChecks, Headphones, Sparkles } from 'lucide-react';
+import { ArrowRight, BookOpenText, History, Users, CalendarDays, CheckSquare, Sparkles } from 'lucide-react';
 import Image from 'next/image';
+import { format } from 'date-fns';
+import TodoListComponent from '@/components/todo/TodoListComponent'; // Import the new component
+import { cn } from '@/lib/utils'; // Added this import
 
-interface FeatureCardProps {
+interface DashboardWidgetProps {
   title: string;
-  description: string;
-  href: string;
-  icon: React.ElementType;
-  imageSrc?: string;
-  imageAlt?: string;
-  aiHint?: string;
+  description?: string;
+  href?: string;
+  icon?: React.ElementType;
+  children?: React.ReactNode;
+  className?: string;
+  borderColor?: string; // e.g., 'border-cyan-500'
 }
 
-function FeatureCard({ title, description, href, icon: Icon, imageSrc, imageAlt, aiHint }: FeatureCardProps) {
-  return (
-    <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 rounded-xl overflow-hidden">
-      {imageSrc && (
-        <div className="relative h-40 w-full">
-          <Image src={imageSrc} alt={imageAlt || title} layout="fill" objectFit="cover" data-ai-hint={aiHint} />
-        </div>
-      )}
+function DashboardWidget({ title, description, href, icon: Icon, children, className, borderColor }: DashboardWidgetProps) {
+  const content = (
+    <Card className={cn("shadow-lg rounded-xl overflow-hidden h-full flex flex-col bg-card text-card-foreground", borderColor ? `border-2 ${borderColor}` : '', className)}>
       <CardHeader>
-        <div className="flex items-center mb-2">
-          <Icon className="w-6 h-6 mr-3 text-primary" />
-          <CardTitle className="text-xl font-semibold">{title}</CardTitle>
+        <div className="flex items-center mb-1">
+          {Icon && <Icon className="w-5 h-5 mr-2 text-primary" />}
+          <CardTitle className="text-lg font-semibold">{title}</CardTitle>
         </div>
-        <CardDescription className="text-sm text-muted-foreground">{description}</CardDescription>
+        {description && <CardDescription className="text-xs text-muted-foreground">{description}</CardDescription>}
       </CardHeader>
-      <CardContent>
-        <Button asChild variant="default" className="w-full rounded-lg group">
-          <Link href={href}>
-            Go to {title}
-            <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-          </Link>
-        </Button>
+      <CardContent className="flex-grow flex flex-col justify-between">
+        {children}
+        {href && (
+          <Button asChild variant="outline" size="sm" className="mt-auto w-full group border-primary/50 hover:bg-primary/10">
+            <Link href={href}>
+              Go to {title}
+              <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+            </Link>
+          </Button>
+        )}
       </CardContent>
     </Card>
   );
+
+  return href && !children ? <Link href={href} className="block h-full">{content}</Link> : content;
 }
 
-export default function HomePage() {
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/30 p-4 sm:p-6 md:p-8">
-      <header className="text-center mb-8 md:mb-12 pt-8">
-        <div className="inline-flex items-center justify-center bg-primary text-primary-foreground p-3 rounded-full mb-4 shadow-md">
-          <Sparkles className="w-10 h-10" />
-        </div>
-        <h1 className="text-4xl sm:text-5xl font-bold text-primary tracking-tight">
-          Grindset
-        </h1>
-        <p className="mt-3 text-lg text-foreground max-w-xl mx-auto">
-          Your personal dashboard for unlocking peak focus, building lasting habits, and achieving mindful productivity.
-        </p>
-      </header>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-6 max-w-4xl mx-auto">
-        <FeatureCard
-          title="No-BS Journal"
-          description="Record your thoughts, track progress, and reflect. Autosaves to the cloud."
+export default function HomePage() {
+  const today = new Date();
+  const formattedDate = format(today, "eeee, MMMM do"); // Tuesday, April 30th
+  
+  const sampleTasks = [
+    { id: '1', text: 'Finish quarterly report', completed: false, createdAt: new Date() },
+    { id: '2', text: '30 min morning exercise', completed: true, createdAt: new Date() },
+    { id: '3', text: 'Read for 20 minutes before bed', completed: false, createdAt: new Date() },
+  ];
+
+  return (
+    <div className="min-h-screen text-foreground p-0"> {/* Removed gradient and reduced padding */}
+      {/* Header is now part of AppLayout */}
+      {/* <header className="text-left mb-6 md:mb-8 pt-0">
+        <h1 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">
+          Dashboard
+        </h1>
+        <p className="mt-2 text-md text-muted-foreground">
+          Welcome back! Here's your overview for today.
+        </p>
+      </header> */}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+        <DashboardWidget
+          title="Daily Tasks"
+          borderColor="border-cyan-500"
+          className="lg:col-span-1 md:row-span-2"
+        >
+          <TodoListComponent showTitle={false} maxHeight="max-h-[280px] sm:max-h-[320px]" enableAdding={true} initialTasks={sampleTasks} />
+        </DashboardWidget>
+
+        <DashboardWidget
+          title={formattedDate}
+          borderColor="border-red-500"
+          className="lg:col-span-1 flex items-center justify-center text-center min-h-[150px] md:min-h-full"
+        >
+          <div className="p-4">
+            <p className="text-3xl md:text-4xl font-bold text-foreground">{format(today, "do")}</p>
+            <p className="text-lg md:text-xl text-muted-foreground">{format(today, "MMMM")}</p>
+            <p className="text-sm text-muted-foreground">{format(today, "yyyy")}</p>
+          </div>
+        </DashboardWidget>
+        
+        <DashboardWidget
+          title="Habit Tracker"
+          description="Monitor your daily habits."
+          href="/habits"
+          icon={History}
+          borderColor="border-green-500"
+          className="lg:col-span-1 min-h-[150px] md:min-h-full"
+        >
+          <div className="text-center py-4">
+             <p className="text-sm text-muted-foreground mb-3">Check in on your habit progress or add a new one.</p>
+            {/* Could show a mini progress bar or stats here */}
+          </div>
+        </DashboardWidget>
+
+
+        <DashboardWidget
+          title="Journal"
+          description="Reflect and record your thoughts."
           href="/journal"
           icon={BookOpenText}
-          imageSrc="https://placehold.co/600x400.png"
-          imageAlt="Journaling"
-          aiHint="journal notebook"
-        />
-        <FeatureCard
-          title="Pomodoro Timer"
-          description="Boost focus with 25/5 minute cycles. Start, stop, and reset with ease."
-          href="/pomodoro"
-          icon={Timer}
-          imageSrc="https://placehold.co/600x400.png"
-          imageAlt="Timer"
-          aiHint="hourglass clock"
-        />
-        <FeatureCard
-          title="Habit Tracker"
-          description="Build good habits, break bad ones. Track daily completion and stay consistent."
-          href="/habits"
-          icon={ListChecks}
-          imageSrc="https://placehold.co/600x400.png"
-          imageAlt="Habit Tracker"
-          aiHint="checklist calendar"
-        />
-        <FeatureCard
-          title="Guided Meditation"
-          description="Find calm and clarity with simple guided meditation tracks. Press play and relax."
-          href="/meditation"
-          icon={Headphones}
-          imageSrc="https://placehold.co/600x400.png"
-          imageAlt="Meditation"
-          aiHint="meditation nature"
-        />
+          borderColor="border-purple-500"
+          className="lg:col-span-1 md:col-span-2 lg:col-start-2 min-h-[150px] md:min-h-full"
+        >
+          <div className="text-center py-4">
+            <p className="text-sm text-muted-foreground mb-3">A new entry awaits your insights.</p>
+            {/* Could show "Suggested new entry" or last entry date */}
+          </div>
+        </DashboardWidget>
+        
+        <DashboardWidget
+          title="Upcoming Events"
+          description="Your schedule at a glance."
+          href="/calendar"
+          icon={CalendarDays}
+          borderColor="border-blue-500"
+           className="lg:col-span-1 min-h-[150px] md:min-h-full"
+        >
+          <div className="text-center py-4">
+            <p className="text-sm text-muted-foreground mb-3">Check your calendar for meetings and events.</p>
+            {/* Could show next event */}
+          </div>
+        </DashboardWidget>
+
+         <DashboardWidget
+          title="Focus Tools"
+          description="Pomodoro & Meditation."
+          href="/pomodoro" // Or a new /tools page
+          icon={Sparkles}
+          borderColor="border-yellow-500"
+          className="lg:col-span-1 md:col-span-2 lg:col-span-3 min-h-[150px] md:min-h-full"
+        >
+          <div className="grid grid-cols-2 gap-4 p-4">
+            <Link href="/pomodoro" className="block p-4 bg-secondary/50 hover:bg-secondary rounded-lg text-center">
+              <CardTitle className="text-md font-semibold">Pomodoro</CardTitle>
+              <CardDescription className="text-xs">Boost Focus</CardDescription>
+            </Link>
+            <Link href="/meditation" className="block p-4 bg-secondary/50 hover:bg-secondary rounded-lg text-center">
+                <CardTitle className="text-md font-semibold">Meditate</CardTitle>
+              <CardDescription className="text-xs">Find Calm</CardDescription>
+            </Link>
+          </div>
+        </DashboardWidget>
+
       </div>
-      <footer className="text-center mt-12 py-6 text-sm text-muted-foreground">
+      
+      <footer className="text-center mt-10 py-5 text-xs text-muted-foreground">
         <p>&copy; {new Date().getFullYear()} Grindset. Stay focused.</p>
       </footer>
     </div>

@@ -24,3 +24,10 @@ export interface PomodoroState {
   isRunning: boolean;
   cycleCount: number; // To track pomodoro cycles
 }
+
+export interface TodoItem {
+  id: string;
+  text: string;
+  completed: boolean;
+  createdAt: Timestamp | Date;
+}
