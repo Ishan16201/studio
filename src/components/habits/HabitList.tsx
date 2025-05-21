@@ -68,10 +68,12 @@ export default function HabitListComponent() {
   }, [fetchHabits]);
 
   const handleToggleHabit = async (habitId: string, completed: boolean) => {
+    const originalHabits = habits.map(h => ({...h})); // Deep copy for rollback
+    
     const updatedHabits = habits.map((h) =>
       h.id === habitId ? { ...h, completed } : h
     );
-    setHabits(updatedHabits);
+    setHabits(updatedHabits); // Optimistic update
 
     try {
       const docRef = doc(db, getHabitsDocPath(currentDate));
@@ -92,10 +94,8 @@ export default function HabitListComponent() {
         description: 'Could not update habit status. Please try again.',
         variant: 'destructive',
       });
-      // Revert UI change on error
-      setHabits(habits.map((h) =>
-        h.id === habitId ? { ...h, completed: !completed } : h
-      ));
+      // Revert UI change to original state on error
+      setHabits(originalHabits);
     }
   };
 
@@ -122,9 +122,9 @@ export default function HabitListComponent() {
         <div
           key={habit.id}
           className={`flex items-center justify-between p-4 rounded-lg shadow-sm transition-all duration-300
-                      ${habit.completed ? 'bg-green-100 dark:bg-green-900 border-l-4 border-green-500' : 'bg-card'}`}
+                      ${habit.completed ? 'bg-primary/20 dark:bg-primary/10 border-l-4 border-primary' : 'bg-card'}`}
         >
-          <Label htmlFor={habit.id} className={`text-base font-medium ${habit.completed ? 'text-green-700 dark:text-green-300 line-through' : 'text-foreground'}`}>
+          <Label htmlFor={habit.id} className={`text-base font-medium ${habit.completed ? 'text-primary line-through' : 'text-foreground'}`}>
             {habit.name}
           </Label>
           <Switch
@@ -132,7 +132,7 @@ export default function HabitListComponent() {
             checked={habit.completed}
             onCheckedChange={(checked) => handleToggleHabit(habit.id, checked)}
             aria-label={`Mark ${habit.name} as ${habit.completed ? 'incomplete' : 'complete'}`}
-            className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-muted"
+            className="data-[state=checked]:bg-primary data-[state=unchecked]:bg-muted"
           />
         </div>
       ))}
