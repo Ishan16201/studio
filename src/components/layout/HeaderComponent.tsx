@@ -7,7 +7,7 @@ import { Sparkles } from 'lucide-react';
 export default function HeaderComponent() {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6 py-4">
-      <SidebarTrigger className="sm:hidden" /> {/* Only show on small screens */}
+      <SidebarTrigger /> {/* Removed sm:hidden to make it always visible */}
       <div className="flex items-center gap-2">
         {/* Title can be here if not in sidebar or if needed for mobile when sidebar is hidden */}
         {/* <Sparkles className="w-7 h-7 text-primary hidden sm:block" />
