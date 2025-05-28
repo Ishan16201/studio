@@ -1,5 +1,5 @@
 
-'use client'; // Required for ProtectedRoute
+'use client'; 
 
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -9,7 +9,8 @@ import Image from 'next/image';
 import { format } from 'date-fns';
 import TodoListComponent from '@/components/todo/TodoListComponent';
 import { cn } from '@/lib/utils';
-import ProtectedRoute from '@/components/auth/ProtectedRoute'; // Import ProtectedRoute
+import ProtectedRoute from '@/components/auth/ProtectedRoute';
+import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
 
 interface DashboardWidgetProps {
   title: string;
@@ -52,12 +53,14 @@ function DashboardWidget({ title, description, href, icon: Icon, children, class
 function HomePageContent() {
   const today = new Date();
   const formattedDate = format(today, "eeee, MMMM do");
+  const { user } = useAuth(); // Get user from AuthContext
   
   return (
     <div className="min-h-screen text-foreground p-0">
       <header className="mb-6 md:mb-8">
         <h1 className="text-3xl sm:text-4xl font-bold text-foreground">Grindset</h1>
-        <p className="text-muted-foreground">Your personal dashboard for focus and growth.</p>
+        {user && <p className="text-xl text-muted-foreground mt-1">Welcome back, {user.name}!</p>}
+        {!user && <p className="text-muted-foreground">Your personal dashboard for focus and growth.</p>}
       </header>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
