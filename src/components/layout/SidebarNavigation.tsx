@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation'; // Import useRouter
 import {
   SidebarContent,
   SidebarHeader,
@@ -12,7 +12,7 @@ import {
   SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { Home, BookOpenText, Timer, ListChecks, Headphones, CheckSquare, CalendarDays, Settings, LogOut } from 'lucide-react';
+import { Home, BookOpenText, Timer, ListChecks, Headphones, CheckSquare, CalendarDays, Settings, LogOut, PlusCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -22,7 +22,7 @@ const navItems = [
   { href: '/habits', label: 'Habit Tracker', icon: ListChecks },
   { href: '/meditation', label: 'Meditations', icon: Headphones },
   { href: '/pomodoro', label: 'Pomodoro', icon: Timer },
-  { href: '/journal', label: 'Journal', icon: BookOpenText },
+  { href: '/journal', label: 'Journal', icon: PlusCircle },
 ];
 
 // Custom SVG Logo component
@@ -52,6 +52,7 @@ const CustomLogo = (props: React.SVGProps<SVGSVGElement>) => (
 
 export default function SidebarNavigation() {
   const pathname = usePathname();
+  const router = useRouter(); // Initialize router
   const { isMobile, setOpenMobile } = useSidebar();
 
   const handleLinkClick = () => {
@@ -60,15 +61,20 @@ export default function SidebarNavigation() {
     }
   };
 
+  const handleLogout = () => {
+    // Placeholder for actual Firebase logout logic
+    console.log("Logout clicked");
+    if (isMobile) setOpenMobile(false);
+    router.push('/login'); // Redirect to login page
+  };
+
   return (
     <SidebarContent className="p-2 bg-sidebar text-sidebar-foreground">
       <div className="flex flex-col h-full">
         <SidebarHeader className="p-2 mb-4">
           <Link href="/" className="flex items-center gap-2" onClick={handleLinkClick}>
             <CustomLogo className="w-8 h-8 text-primary" />
-            <h1 className="text-2xl font-bold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
-              Grindset
-            </h1>
+            {/* Grindset title removed from sidebar */}
           </Link>
         </SidebarHeader>
 
@@ -101,18 +107,31 @@ export default function SidebarNavigation() {
         <SidebarFooter className="mt-auto p-2 border-t border-sidebar-border">
           <SidebarMenu>
             <SidebarMenuItem>
-               <SidebarMenuButton 
-                  className="w-full justify-start text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" 
-                  tooltip="Settings"
-                >
-                <Settings className="h-5 w-5 mr-3 group-data-[collapsible=icon]:mr-0" />
-                <span className="group-data-[collapsible=icon]:hidden">Settings</span>
-              </SidebarMenuButton>
+               <Link href="/settings" legacyBehavior passHref>
+                <SidebarMenuButton 
+                    asChild
+                    isActive={pathname === '/settings'}
+                    className={cn(
+                        "w-full justify-start text-sm",
+                        pathname === '/settings' 
+                        ? "bg-sidebar-primary text-sidebar-primary-foreground" 
+                        : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    )}
+                    tooltip="Settings"
+                    onClick={handleLinkClick}
+                    >
+                    <a>
+                        <Settings className="h-5 w-5 mr-3 group-data-[collapsible=icon]:mr-0" />
+                        <span className="group-data-[collapsible=icon]:hidden">Settings</span>
+                    </a>
+                </SidebarMenuButton>
+              </Link>
             </SidebarMenuItem>
              <SidebarMenuItem>
                <SidebarMenuButton 
                   className="w-full justify-start text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   tooltip="Log Out"
+                  onClick={handleLogout} // Use new logout handler
                 >
                 <LogOut className="h-5 w-5 mr-3 group-data-[collapsible=icon]:mr-0" />
                 <span className="group-data-[collapsible=icon]:hidden">Log Out</span>

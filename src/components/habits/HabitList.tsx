@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -40,7 +41,8 @@ export default function HabitListComponent() {
 
       let dailyHabitStatus: Record<string, boolean> = {};
       if (docSnap.exists()) {
-        dailyHabitStatus = (docSnap.data() as DailyHabits).habits || {};
+        const data = docSnap.data() as DailyHabits;
+        dailyHabitStatus = data.habits || {};
       }
 
       const mergedHabits = PREDEFINED_HABITS.map((predefinedHabit, index) => ({
@@ -54,10 +56,17 @@ export default function HabitListComponent() {
     } catch (error) {
       console.error('Error fetching habits:', error);
       toast({
-        title: 'Error',
-        description: 'Could not load habits. Please try again.',
+        title: 'Error Loading Habits',
+        description: 'Could not load habits. Please ensure you have an internet connection and try again.',
         variant: 'destructive',
       });
+      // Fallback to predefined habits if fetch fails, ensuring UI is still usable
+      const fallbackHabits = PREDEFINED_HABITS.map((predefinedHabit) => ({
+        id: predefinedHabit.name.toLowerCase().replace(/\s+/g, '-'),
+        name: predefinedHabit.name,
+        completed: false,
+      }));
+      setHabits(fallbackHabits);
     } finally {
       setIsLoading(false);
     }
@@ -91,7 +100,7 @@ export default function HabitListComponent() {
       console.error('Error updating habit:', error);
       toast({
         title: 'Update Error',
-        description: 'Could not update habit status. Please try again.',
+        description: 'Could not update habit status. Your change was not saved.',
         variant: 'destructive',
       });
       // Revert UI change to original state on error
@@ -113,6 +122,7 @@ export default function HabitListComponent() {
   }
   
   if (habits.length === 0 && !isLoading) {
+    // This case should be less likely now with fallback, but good to keep
     return <p className="text-center text-muted-foreground py-8">No habits defined yet. Start by adding some!</p>;
   }
 
@@ -148,3 +158,4 @@ export default function HabitListComponent() {
     </div>
   );
 }
+

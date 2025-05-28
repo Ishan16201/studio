@@ -1,3 +1,4 @@
+
 import type { Timestamp } from 'firebase/firestore';
 
 export interface Habit {
@@ -14,6 +15,7 @@ export interface DailyHabits {
 export interface JournalEntry {
   content: string;
   lastUpdated: Timestamp | Date; // Store as Firestore Timestamp, can be Date in client
+  userId?: string;
 }
 
 export type PomodoroMode = 'work' | 'break';
@@ -31,4 +33,12 @@ export interface TodoItem {
   completed: boolean;
   createdAt: Timestamp; // Always Firestore Timestamp when fetched/saved
   userId?: string; // To associate tasks with a user
+}
+
+// For Register Form
+export interface UserProfile {
+  name: string;
+  phone?: string; // Optional
+  email: string;
+  // Password is not stored directly, handled by Firebase Auth
 }

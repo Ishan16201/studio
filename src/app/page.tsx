@@ -1,3 +1,4 @@
+
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -51,23 +52,27 @@ export default function HomePage() {
   
   return (
     <div className="min-h-screen text-foreground p-0">
+      <header className="mb-6 md:mb-8">
+        <h1 className="text-3xl sm:text-4xl font-bold text-foreground">Grindset</h1>
+        <p className="text-muted-foreground">Your personal dashboard for focus and growth.</p>
+      </header>
+      
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         <DashboardWidget
           title="Daily Tasks"
-          borderColor="border-primary" // Updated border color
+          borderColor="border-primary"
           className="lg:col-span-1 md:row-span-2"
         >
-          {/* TodoListComponent will now fetch its own data from Firebase */}
           <TodoListComponent 
             showTitle={false} 
-            maxHeight="max-h-[280px] sm:max-h-[320px] md:max-h-[calc(100%-4rem)]" // More dynamic height
+            maxHeight="max-h-[280px] sm:max-h-[320px] md:max-h-[calc(100%-4rem)]"
             enableAdding={true} 
           />
         </DashboardWidget>
 
         <DashboardWidget
           title={formattedDate}
-          borderColor="border-accent" // Updated border color
+          borderColor="border-accent"
           className="lg:col-span-1 flex items-center justify-center text-center min-h-[150px] md:min-h-full"
         >
           <div className="p-4">
@@ -82,10 +87,10 @@ export default function HomePage() {
           description="Monitor your daily habits."
           href="/habits"
           icon={History}
-          borderColor="border-green-500" // Kept original for variety
+          borderColor="border-green-500"
           className="lg:col-span-1 min-h-[150px] md:min-h-full"
         >
-          <div className="text-center py-4 px-2"> {/* Added padding */}
+          <div className="text-center py-4 px-2">
              <p className="text-sm text-muted-foreground mb-3">Check in on your habit progress or start tracking.</p>
           </div>
         </DashboardWidget>
@@ -94,11 +99,11 @@ export default function HomePage() {
           title="Journal"
           description="Reflect and record your thoughts."
           href="/journal"
-          icon={BookOpenText}
-          borderColor="border-purple-500" // Kept original
+          icon={BookOpenText} // Or PlusCircle if preferred, BookOpenText is also good.
+          borderColor="border-purple-500"
           className="lg:col-span-1 md:col-span-2 lg:col-start-2 min-h-[150px] md:min-h-full"
         >
-          <div className="text-center py-4 px-2"> {/* Added padding */}
+          <div className="text-center py-4 px-2">
             <p className="text-sm text-muted-foreground mb-3">A new entry awaits your insights for today.</p>
           </div>
         </DashboardWidget>
@@ -108,10 +113,10 @@ export default function HomePage() {
           description="Your schedule at a glance."
           href="/calendar"
           icon={CalendarDays}
-          borderColor="border-blue-500" // Kept original
+          borderColor="border-blue-500"
            className="lg:col-span-1 min-h-[150px] md:min-h-full"
         >
-          <div className="text-center py-4 px-2"> {/* Added padding */}
+          <div className="text-center py-4 px-2">
             <p className="text-sm text-muted-foreground mb-3">Check your calendar for important dates and events.</p>
           </div>
         </DashboardWidget>
@@ -119,9 +124,8 @@ export default function HomePage() {
          <DashboardWidget
           title="Focus Tools"
           description="Pomodoro & Meditation."
-          // href="/pomodoro" // Combined into one widget, individual links below
           icon={Sparkles}
-          borderColor="border-yellow-500" // Kept original
+          borderColor="border-yellow-500"
           className="lg:col-span-1 md:col-span-2 lg:col-span-3 min-h-[150px] md:min-h-full"
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4">
@@ -144,3 +148,4 @@ export default function HomePage() {
     </div>
   );
 }
+
