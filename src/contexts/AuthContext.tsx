@@ -38,40 +38,48 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const checkAuthStatus = async () => {
       setIsLoading(true);
-      const storedAuth = localStorage.getItem(IS_AUTHENTICATED_KEY);
-      const lastActive = localStorage.getItem(LAST_ACTIVE_KEY);
-      const storedUserDetails = localStorage.getItem(USER_DETAILS_KEY);
-      let currentlyAuth = storedAuth === 'true';
+      try {
+        const storedAuth = localStorage.getItem(IS_AUTHENTICATED_KEY);
+        const lastActive = localStorage.getItem(LAST_ACTIVE_KEY);
+        const storedUserDetails = localStorage.getItem(USER_DETAILS_KEY);
+        let currentlyAuth = storedAuth === 'true';
 
-      if (currentlyAuth && lastActive) {
-        const lastActiveTime = parseInt(lastActive, 10);
-        if (Date.now() - lastActiveTime > INACTIVITY_LOGOUT_DURATION) {
-          console.log("User inactive for too long, logging out.");
-          currentlyAuth = false;
-          localStorage.removeItem(IS_AUTHENTICATED_KEY);
-          localStorage.removeItem(LAST_ACTIVE_KEY);
-          localStorage.removeItem(USER_DETAILS_KEY);
+        if (currentlyAuth && lastActive) {
+          const lastActiveTime = parseInt(lastActive, 10);
+          if (Date.now() - lastActiveTime > INACTIVITY_LOGOUT_DURATION) {
+            console.log("User inactive for too long, logging out.");
+            currentlyAuth = false;
+            localStorage.removeItem(IS_AUTHENTICATED_KEY);
+            localStorage.removeItem(LAST_ACTIVE_KEY);
+            localStorage.removeItem(USER_DETAILS_KEY);
+            setUser(null);
+          }
+        } else if (currentlyAuth && !lastActive) {
+          updateLastActive();
+        }
+
+
+        if (currentlyAuth) {
+          setIsAuthenticated(true);
+          if (storedUserDetails) {
+            setUser(JSON.parse(storedUserDetails));
+          } else {
+            // Fallback if no details are stored (e.g., old session before this change)
+            setUser({ name: "User" });
+          }
+          updateLastActive();
+        } else {
+          setIsAuthenticated(false);
           setUser(null);
         }
-      } else if (currentlyAuth && !lastActive) {
-        updateLastActive();
-      }
-
-
-      if (currentlyAuth) {
-        setIsAuthenticated(true);
-        if (storedUserDetails) {
-          setUser(JSON.parse(storedUserDetails));
-        } else {
-          // Fallback if no details are stored (e.g., old session before this change)
-          setUser({ name: "User" }); 
-        }
-        updateLastActive();
-      } else {
+      } catch (error) {
+        console.error("Error during auth status check:", error);
+        // In case of error, assume not authenticated and finish loading
         setIsAuthenticated(false);
         setUser(null);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
     checkAuthStatus();
   }, []);
