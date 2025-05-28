@@ -6,7 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { db, USER_ID } from '@/lib/firebase';
+import { db, USER_ID, firebaseInitialized, firebaseInitError as fbInitError } from '@/lib/firebase';
 import {
   doc,
   getDoc,
@@ -24,13 +24,8 @@ import type { Habit, DailyHabits } from '@/types';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { PlusCircle, Trash2 } from 'lucide-react';
+import { PlusCircle, Trash2, AlertTriangle } from 'lucide-react';
 
-// Corrected path structure:
-// Top-level collection: 'userHabitsData'
-// Document per user: USER_ID
-// Subcollection: 'dailyLogs'
-// Document per day: 'YYYY-MM-DD' (dateString)
 const getDailyHabitsDocPath = (date: Date) => {
   const dateString = format(date, 'yyyy-MM-dd');
   return `userHabitsData/${USER_ID}/dailyLogs/${dateString}`;
@@ -43,11 +38,23 @@ export default function HabitListComponent() {
   const [dailyCompletions, setDailyCompletions] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [newHabitName, setNewHabitName] = useState('');
-  const [currentDate, setCurrentDate] = useState(new Date()); // Tracks the date for which habits are displayed/toggled
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [initError, setInitError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // Fetch habit definitions
   useEffect(() => {
+    if (!firebaseInitialized) {
+      setInitError(fbInitError || "Firebase is not initialized. Please check configuration.");
+      setIsLoading(false);
+      return;
+    }
+    if (!db) {
+        setInitError("Firestore database instance is not available.");
+        setIsLoading(false);
+        return;
+    }
+    setInitError(null); // Clear init error if Firebase is good
+
     setIsLoading(true);
     const habitsColRef = collection(db, userHabitsCollectionPath);
     const q = query(habitsColRef, orderBy('createdAt', 'asc'));
@@ -68,23 +75,23 @@ export default function HabitListComponent() {
         console.error('Error fetching habit definitions:', error);
         toast({
           title: 'Error Loading Habit Definitions',
-          description: 'Could not load your habit list. Please check your connection or browser storage.',
+          description: 'Could not load your habit list. Please check your connection or browser storage. Showing empty list.',
           variant: 'destructive',
         });
-        setDefinedHabits([]); // Fallback to an empty list
+        setDefinedHabits([]);
         setIsLoading(false);
       }
     );
     return () => unsubscribe();
   }, [toast]);
 
-  // Fetch daily completions for the currentDate
   const fetchDailyCompletions = useCallback(async () => {
+    if (!firebaseInitialized || !db) return;
     try {
       const dailyDocRef = doc(db, getDailyHabitsDocPath(currentDate));
       const docSnap = await getDoc(dailyDocRef);
       if (docSnap.exists()) {
-        const data = docSnap.data() as DailyHabits; // DailyHabits type has 'date' and 'habits'
+        const data = docSnap.data() as DailyHabits;
         setDailyCompletions(data.habits || {});
       } else {
         setDailyCompletions({});
@@ -100,10 +107,16 @@ export default function HabitListComponent() {
   }, [currentDate, toast]);
 
   useEffect(() => {
-    fetchDailyCompletions();
-  }, [fetchDailyCompletions]);
+    if (firebaseInitialized && db) {
+      fetchDailyCompletions();
+    }
+  }, [fetchDailyCompletions, firebaseInitialized, db]);
 
   const handleAddHabit = async () => {
+    if (!firebaseInitialized || !db) {
+      toast({ title: 'Error', description: 'Cannot add habit: Firebase not configured.', variant: 'destructive' });
+      return;
+    }
     const trimmedName = newHabitName.trim();
     if (trimmedName === '') {
       toast({ title: 'Empty Habit Name', description: 'Please enter a name for your habit.', variant: 'destructive' });
@@ -122,7 +135,6 @@ export default function HabitListComponent() {
       });
       setNewHabitName('');
       toast({ title: 'Habit Added', description: `"${trimmedName}" was successfully added.` });
-      // The onSnapshot listener should pick up the new habit and update definedHabits
     } catch (error) {
       console.error('Error adding habit:', error);
       toast({ title: 'Error Adding Habit', description: 'Could not add the new habit.', variant: 'destructive' });
@@ -130,6 +142,10 @@ export default function HabitListComponent() {
   };
 
   const handleDeleteHabit = async (habitId: string, habitName: string) => {
+    if (!firebaseInitialized || !db) {
+      toast({ title: 'Error', description: 'Cannot delete habit: Firebase not configured.', variant: 'destructive' });
+      return;
+    }
     try {
       await deleteDoc(doc(db, userHabitsCollectionPath, habitId));
       
@@ -138,7 +154,6 @@ export default function HabitListComponent() {
       setDailyCompletions(updatedDailyCompletions);
       
       const dailyDocRef = doc(db, getDailyHabitsDocPath(currentDate));
-      // Ensure the document contains the date field as per DailyHabits type
       await setDoc(dailyDocRef, { date: format(currentDate, 'yyyy-MM-dd'), habits: updatedDailyCompletions }, { merge: true });
 
       toast({ title: 'Habit Deleted', description: `"${habitName}" was deleted.` });
@@ -149,6 +164,10 @@ export default function HabitListComponent() {
   };
 
   const handleToggleHabit = async (habitName: string, newCompletedStatus: boolean) => {
+    if (!firebaseInitialized || !db) {
+      toast({ title: 'Error', description: 'Cannot update habit: Firebase not configured.', variant: 'destructive' });
+      return;
+    }
     const originalCompletions = { ...dailyCompletions };
     
     const updatedCompletions = {
@@ -165,7 +184,6 @@ export default function HabitListComponent() {
       });
       habitsToSave[habitName] = newCompletedStatus;
 
-      // Ensure the document structure includes the 'date' field.
       await setDoc(dailyDocRef, { date: format(currentDate, 'yyyy-MM-dd'), habits: habitsToSave }, { merge: true });
     } catch (error) {
       console.error('Error updating habit status:', error);
@@ -178,6 +196,16 @@ export default function HabitListComponent() {
     }
   };
   
+  if (initError) {
+    return (
+      <div className="w-full p-4 text-center text-destructive-foreground bg-destructive/80 rounded-md">
+        <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
+        <p className="font-semibold">Configuration Error</p>
+        <p className="text-sm">{initError}</p>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -202,7 +230,7 @@ export default function HabitListComponent() {
 
   return (
     <div className="space-y-4">
-      {displayHabits.length === 0 && !isLoading && ( // Also check !isLoading here
+      {displayHabits.length === 0 && !isLoading && (
         <p className="text-center text-muted-foreground py-8">No habits defined yet. Add your first habit below!</p>
       )}
       {displayHabits.map((habit) => (

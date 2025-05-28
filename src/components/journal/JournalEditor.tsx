@@ -3,12 +3,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Textarea } from '@/components/ui/textarea';
-import { db, USER_ID } from '@/lib/firebase';
+import { db, USER_ID, firebaseInitialized, firebaseInitError as fbInitError } from '@/lib/firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { useAutosave } from '@/hooks/useAutosave';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useJournalEntry } from '@/hooks/useJournalEntry'; // Import the new hook
+import { useJournalEntry } from '@/hooks/useJournalEntry'; 
+import { AlertTriangle } from 'lucide-react';
 
 const JOURNAL_DOC_PATH = `journal/${USER_ID}/entry/main`;
 
@@ -25,6 +26,10 @@ export default function JournalEditor() {
   }, [initialEntry]);
 
   const handleSave = useCallback(async (currentContent: string) => {
+    if (!firebaseInitialized || !db) {
+      toast({ title: 'Error', description: 'Cannot save journal: Firebase not configured.', variant: 'destructive' });
+      return;
+    }
     try {
       const docRef = doc(db, JOURNAL_DOC_PATH);
       await setDoc(docRef, {
@@ -33,7 +38,6 @@ export default function JournalEditor() {
         userId: USER_ID,
       }, { merge: true });
       setIsDirty(false);
-      // After saving, refetch to update lastUpdated timestamp if needed elsewhere
       refetch(); 
     } catch (error) {
       console.error('Error saving journal:', error);
@@ -57,6 +61,16 @@ export default function JournalEditor() {
     setIsDirty(true);
   };
 
+  if (!firebaseInitialized) {
+    return (
+      <div className="p-4 sm:p-6 text-center text-destructive-foreground bg-destructive/80 rounded-md h-[calc(100vh-200px)] sm:h-[calc(100vh-250px)] md:h-[500px] flex flex-col justify-center items-center">
+        <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
+        <p className="font-semibold">Configuration Error</p>
+        <p className="text-sm">{fbInitError || "Firebase is not configured. Please check console and setup."}</p>
+      </div>
+    );
+  }
+
   if (isLoadingEntry) {
     return (
       <div className="p-4 sm:p-6 h-[calc(100vh-200px)] sm:h-[calc(100vh-250px)] md:h-[500px]">
@@ -65,7 +79,7 @@ export default function JournalEditor() {
     );
   }
 
-  if (entryError) {
+  if (entryError && entryError !== fbInitError) {
     return (
       <div className="p-4 sm:p-6 text-destructive text-center">
         <p>Error loading journal: {entryError}</p>

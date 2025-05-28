@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -8,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PlusCircle, Trash2, AlertTriangle } from 'lucide-react';
 import type { TodoItem } from '@/types';
-import { db, USER_ID } from '@/lib/firebase'; // Assuming USER_ID is exported for simplicity
+import { db, USER_ID, firebaseInitialized, firebaseInitError as fbInitError } from '@/lib/firebase'; // Assuming USER_ID is exported for simplicity
 import {
   collection,
   query,
@@ -27,7 +28,7 @@ import { useToast } from '@/hooks/use-toast';
 interface TodoListComponentProps {
   showTitle?: boolean;
   maxHeight?: string;
-  enableAdding?: boolean; // Keep this if you want to control add functionality specifically
+  enableAdding?: boolean; 
 }
 
 export default function TodoListComponent({
@@ -42,6 +43,17 @@ export default function TodoListComponent({
   const { toast } = useToast();
 
   useEffect(() => {
+    if (!firebaseInitialized) {
+      setError(fbInitError || "Firebase is not initialized. Please check configuration.");
+      setIsLoading(false);
+      return;
+    }
+    if (!db) {
+        setError("Firestore database instance is not available.");
+        setIsLoading(false);
+        return;
+    }
+
     setIsLoading(true);
     setError(null);
     const tasksCol = collection(db, 'todos');
@@ -77,6 +89,10 @@ export default function TodoListComponent({
   }, [toast]);
 
   const addTask = async () => {
+    if (!firebaseInitialized || !db) {
+      toast({ title: 'Error', description: 'Cannot add task: Firebase not configured.', variant: 'destructive' });
+      return;
+    }
     if (newTaskText.trim() === '') return;
     try {
       await addDoc(collection(db, 'todos'), {
@@ -98,11 +114,13 @@ export default function TodoListComponent({
   };
 
   const toggleTask = async (id: string, currentCompleted: boolean) => {
+    if (!firebaseInitialized || !db) {
+      toast({ title: 'Error', description: 'Cannot update task: Firebase not configured.', variant: 'destructive' });
+      return;
+    }
     const taskRef = doc(db, 'todos', id);
     try {
       await updateDoc(taskRef, { completed: !currentCompleted });
-      // Optimistic update handled by onSnapshot, or manual:
-      // setTasks(tasks.map(task => task.id === id ? { ...task, completed: !task.completed } : task));
     } catch (err) {
       console.error('Error toggling task:', err);
       toast({
@@ -114,10 +132,13 @@ export default function TodoListComponent({
   };
 
   const deleteTask = async (id: string) => {
+    if (!firebaseInitialized || !db) {
+      toast({ title: 'Error', description: 'Cannot delete task: Firebase not configured.', variant: 'destructive' });
+      return;
+    }
     const taskRef = doc(db, 'todos', id);
     try {
       await deleteDoc(taskRef);
-      // toast({ title: 'Task Deleted' });
     } catch (err) {
       console.error('Error deleting task:', err);
       toast({
@@ -130,13 +151,20 @@ export default function TodoListComponent({
   
   const sortedTasks = [...tasks].sort((a, b) => {
     if (a.completed === b.completed) {
-      // If both are same completed status, sort by creation time (newest first)
-      // Assuming createdAt is a Firestore Timestamp
       return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
     }
-    return a.completed ? 1 : -1; // Incomplete tasks first
+    return a.completed ? 1 : -1; 
   });
 
+  if (!firebaseInitialized) {
+    return (
+      <div className="w-full p-4 text-center text-destructive-foreground bg-destructive/80 rounded-md">
+        <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
+        <p className="font-semibold">Configuration Error</p>
+        <p className="text-sm">{fbInitError || "Firebase is not configured. Please check console and setup."}</p>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -155,7 +183,7 @@ export default function TodoListComponent({
     );
   }
 
-  if (error) {
+  if (error && error !== fbInitError) { // Don't show double error if fbInitError is the cause
     return (
       <div className="w-full p-4 text-center text-destructive-foreground bg-destructive/80 rounded-md">
         <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
@@ -185,8 +213,8 @@ export default function TodoListComponent({
         </div>
       )}
 
-      <ScrollArea className={`${maxHeight} pr-1`}> {/* Reduced pr for tighter mobile*/}
-        {sortedTasks.length === 0 && <p className="text-muted-foreground text-center py-4">No tasks yet. Add some!</p>}
+      <ScrollArea className={`${maxHeight} pr-1`}>
+        {sortedTasks.length === 0 && !isLoading && <p className="text-muted-foreground text-center py-4">No tasks yet. Add some!</p>}
         <ul className="space-y-2">
           {sortedTasks.map((task) => (
             <li
@@ -211,7 +239,7 @@ export default function TodoListComponent({
                   {task.text}
                 </label>
               </div>
-              {enableAdding && ( // Only show delete if adding is enabled (full todo page vs widget)
+              {enableAdding && ( 
                 <Button
                   variant="ghost"
                   size="icon"

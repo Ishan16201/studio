@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { db, USER_ID } from '@/lib/firebase';
+import { db, USER_ID, firebaseInitialized, firebaseInitError as fbInitError } from '@/lib/firebase';
 import { doc, getDoc, DocumentSnapshot } from 'firebase/firestore';
 import type { JournalEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
@@ -16,6 +16,19 @@ export function useJournalEntry() {
   const { toast } = useToast();
 
   const fetchJournal = useCallback(async () => {
+    if (!firebaseInitialized) {
+      setError(fbInitError || "Firebase is not initialized. Cannot fetch journal.");
+      setIsLoading(false);
+      setEntry({ content: '', lastUpdated: new Date(), userId: USER_ID }); // Provide a default empty state
+      return;
+    }
+     if (!db) {
+        setError("Firestore database instance is not available. Cannot fetch journal.");
+        setIsLoading(false);
+        setEntry({ content: '', lastUpdated: new Date(), userId: USER_ID });
+        return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
@@ -23,24 +36,24 @@ export function useJournalEntry() {
       const docSnap: DocumentSnapshot<Partial<Omit<JournalEntry, 'userId'>>> = await getDoc(docRef) as DocumentSnapshot<Partial<Omit<JournalEntry, 'userId'>>>;
       if (docSnap.exists()) {
         const data = docSnap.data();
-        // Ensure content defaults to empty string if undefined from Firestore
         setEntry({ 
           content: data.content || '', 
-          lastUpdated: data.lastUpdated || new Date(), // Default lastUpdated if missing
+          lastUpdated: data.lastUpdated || new Date(), 
           userId: USER_ID 
         });
       } else {
-        // Initialize with empty content if no entry exists
         setEntry({ content: '', lastUpdated: new Date(), userId: USER_ID });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching journal:', err);
-      setError('Could not load your journal. Please try again later.');
+      setError(`Could not load your journal: ${err.message}`);
       toast({
         title: 'Error',
-        description: 'Could not load your journal. Please try again later.',
+        description: `Could not load your journal. Please try again later.`,
         variant: 'destructive',
       });
+      // Set a default entry to prevent crash on consumption
+      setEntry({ content: '', lastUpdated: new Date(), userId: USER_ID });
     } finally {
       setIsLoading(false);
     }
@@ -52,4 +65,3 @@ export function useJournalEntry() {
 
   return { entry, isLoading, error, refetch: fetchJournal };
 }
-

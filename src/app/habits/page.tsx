@@ -5,11 +5,11 @@ import { useState, useEffect } from 'react';
 import HabitListComponent from '@/components/habits/HabitList';
 import HabitActivityCalendar from '@/components/habits/HabitActivityCalendar';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { ListChecks, CalendarSearch, Info } from 'lucide-react';
+import { ListChecks, CalendarSearch, AlertTriangle } from 'lucide-react';
 import { format, startOfYear, endOfYear, parseISO } from 'date-fns';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import type { Habit } from '@/types';
-import { db, USER_ID } from '@/lib/firebase';
+import { db, USER_ID, firebaseInitialized, firebaseInitError as fbInitError } from '@/lib/firebase';
 import { collection, query, orderBy, onSnapshot, getDocs, where, doc, setDoc, getDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -31,10 +31,32 @@ function HabitsPageContent() {
   const [allDailyLogsForYear, setAllDailyLogsForYear] = useState<DailyLogData[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(true);
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  const [initError, setInitError] = useState<string | null>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (!firebaseInitialized) {
+      setInitError(fbInitError || "Firebase is not initialized. Cannot load habits functionality.");
+      setIsLoadingHabits(false);
+      setIsLoadingLogs(false);
+      return;
+    }
+    if (!db) {
+      setInitError("Firestore database instance is not available. Cannot load habits functionality.");
+      setIsLoadingHabits(false);
+      setIsLoadingLogs(false);
+      return;
+    }
+    setInitError(null); // Clear init error if Firebase is good
+  }, []);
+
 
   // Fetch defined habits
   useEffect(() => {
+    if (!firebaseInitialized || !db || initError) {
+      setIsLoadingHabits(false); // Don't attempt fetch if Firebase isn't ready or errored
+      return;
+    }
     setIsLoadingHabits(true);
     const habitsColRef = collection(db, userHabitsCollectionPath);
     const q = query(habitsColRef, orderBy('createdAt', 'asc'));
@@ -62,9 +84,13 @@ function HabitsPageContent() {
       }
     );
     return () => unsubscribe();
-  }, [toast]);
+  }, [toast, firebaseInitialized, db, initError]);
 
   const fetchAllYearlyLogs = async () => {
+      if (!firebaseInitialized || !db || initError) {
+        setIsLoadingLogs(false);
+        return;
+      }
       setIsLoadingLogs(true);
       try {
         const yearStart = startOfYear(new Date(currentYear, 0, 1));
@@ -94,17 +120,21 @@ function HabitsPageContent() {
       }
     };
 
-  // Fetch all daily logs for the current year once
   useEffect(() => {
-    fetchAllYearlyLogs();
-  }, [currentYear, toast]);
+    if (firebaseInitialized && db && !initError) {
+     fetchAllYearlyLogs();
+    }
+  }, [currentYear, toast, firebaseInitialized, db, initError]);
 
 
   const handleTogglePastHabit = async (date: Date, habitName: string, currentStatus: boolean) => {
+    if (!firebaseInitialized || !db) {
+      toast({ title: 'Error', description: 'Cannot update habit: Firebase not configured.', variant: 'destructive' });
+      return;
+    }
     const dateString = format(date, 'yyyy-MM-dd');
     const dailyDocRef = doc(db, userDailyLogsCollectionPath, dateString);
 
-    // Optimistically update UI
     setAllDailyLogsForYear(prevLogs => {
       const logIndex = prevLogs.findIndex(log => log.date === dateString);
       const newStatus = !currentStatus;
@@ -114,12 +144,10 @@ function HabitsPageContent() {
         updatedLogs[logIndex] = { ...updatedLogs[logIndex], habits: newHabits };
         return updatedLogs;
       } else {
-        // If no log exists for this day, create one
         const newLog: DailyLogData = { date: dateString, habits: { [habitName]: newStatus } };
-        // Initialize other defined habits for this new log entry if they are not present
         definedHabits.forEach(h => {
           if (!(h.name in newLog.habits)) {
-            newLog.habits[h.name] = false; // Default to false if not the one being toggled
+            newLog.habits[h.name] = false; 
           }
         });
         return [...prevLogs, newLog].sort((a, b) => a.date.localeCompare(b.date));
@@ -133,12 +161,11 @@ function HabitsPageContent() {
       if (docSnap.exists()) {
         newHabitsData = { ...docSnap.data().habits };
       } else {
-        // If the document doesn't exist, initialize with all defined habits as false
         definedHabits.forEach(h => {
           newHabitsData[h.name] = false;
         });
       }
-      newHabitsData[habitName] = !currentStatus; // Toggle the specific habit
+      newHabitsData[habitName] = !currentStatus; 
 
       await setDoc(dailyDocRef, { date: dateString, habits: newHabitsData }, { merge: true });
 
@@ -153,11 +180,23 @@ function HabitsPageContent() {
         description: 'Could not update habit status. Reverting change.',
         variant: 'destructive',
       });
-      // Revert optimistic update by re-fetching
       await fetchAllYearlyLogs();
     }
   };
 
+  if (initError) {
+    return (
+      <div className="container mx-auto max-w-4xl p-4 md:p-8">
+        <Card className="shadow-xl rounded-xl mb-8">
+          <CardContent className="p-6 text-center text-destructive-foreground bg-destructive/80 rounded-md">
+            <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
+            <CardTitle className="text-xl font-semibold">Configuration Error</CardTitle>
+            <CardDescription className="text-destructive-foreground/80">{initError}</CardDescription>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto max-w-4xl p-4 md:p-8"> 
@@ -236,5 +275,3 @@ export default function HabitsPage() {
     </ProtectedRoute>
   );
 }
-
-    
