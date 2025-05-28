@@ -1,42 +1,63 @@
+
 'use client';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Sidebar,
   SidebarContent,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarFooter,
-  SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { Button } from '@/components/ui/button';
-import { Home, BookOpenText, Timer, ListChecks, Headphones, CheckSquare, CalendarDays, Settings, LogOut, Sparkles } from 'lucide-react';
+import { Home, BookOpenText, Timer, ListChecks, Headphones, CheckSquare, CalendarDays, Settings, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: Home },
   { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/todo', label: 'To-Do List', icon: CheckSquare },
-  { href: '/habits', label: 'Habit Tracker', icon: ListChecks }, // Using ListChecks as History icon is not in Lucide
+  { href: '/habits', label: 'Habit Tracker', icon: ListChecks },
   { href: '/meditation', label: 'Meditations', icon: Headphones },
   { href: '/pomodoro', label: 'Pomodoro', icon: Timer },
   { href: '/journal', label: 'Journal', icon: BookOpenText },
 ];
 
+// Custom SVG Logo component
+const CustomLogo = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    aria-hidden="true"
+    focusable="false"
+    {...props}
+  >
+    <circle cx="12" cy="12" r="2" />
+    <path
+      fillRule="evenodd"
+      d="M12 12 m0 -5 a5 5 0 1 0 0 10 a5 5 0 1 0 0 -10z M12 12 m0 -3 a3 3 0 1 1 0 6 a3 3 0 1 1 0 -6z"
+    />
+    <path
+      fillRule="evenodd"
+      d="M12 12 m0 -9 a9 9 0 1 0 0 18 a9 9 0 1 0 0 -18z M12 12 m0 -7 a7 7 0 1 1 0 14 a7 7 0 1 1 0 -14z"
+    />
+    <rect x="2" y="11" width="1" height="2" />
+    <rect x="21" y="11" width="1" height="2" />
+  </svg>
+);
+
+
 export default function SidebarNavigation() {
   const pathname = usePathname();
-  const { open, setOpen, isMobile, openMobile, setOpenMobile } = useSidebar();
+  const { isMobile, setOpenMobile } = useSidebar();
 
   const handleLinkClick = () => {
     if (isMobile) {
       setOpenMobile(false);
     }
-    // For non-mobile, sidebar might stay open or be controlled by user preference.
-    // If you want it to close on non-mobile too: setOpen(false);
   };
 
   return (
@@ -44,7 +65,7 @@ export default function SidebarNavigation() {
       <div className="flex flex-col h-full">
         <SidebarHeader className="p-2 mb-4">
           <Link href="/" className="flex items-center gap-2" onClick={handleLinkClick}>
-            <Sparkles className="w-8 h-8 text-primary" />
+            <CustomLogo className="w-8 h-8 text-primary" />
             <h1 className="text-2xl font-bold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
               Grindset
             </h1>
@@ -78,7 +99,6 @@ export default function SidebarNavigation() {
         </SidebarMenu>
 
         <SidebarFooter className="mt-auto p-2 border-t border-sidebar-border">
-           {/* Example Footer items - replace or remove as needed */}
           <SidebarMenu>
             <SidebarMenuItem>
                <SidebarMenuButton 
@@ -104,3 +124,4 @@ export default function SidebarNavigation() {
     </SidebarContent>
   );
 }
+
