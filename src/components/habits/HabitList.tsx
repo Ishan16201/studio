@@ -28,17 +28,17 @@ import { PlusCircle, Trash2 } from 'lucide-react';
 
 const getDailyHabitsDocPath = (date: Date) => {
   const dateString = format(date, 'yyyy-MM-dd');
-  return `dailyHabits/${USER_ID}/${dateString}`; // Changed collection name for clarity
+  return `dailyHabits/${USER_ID}/${dateString}`; 
 };
 
 const userHabitsCollectionPath = `userHabits/${USER_ID}/habits`;
 
 export default function HabitListComponent() {
-  const [definedHabits, setDefinedHabits] = useState<Habit[]>([]); // Stores habit definitions
-  const [dailyCompletions, setDailyCompletions] = useState<Record<string, boolean>>({}); // Tracks completion for the current day
+  const [definedHabits, setDefinedHabits] = useState<Habit[]>([]);
+  const [dailyCompletions, setDailyCompletions] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [newHabitName, setNewHabitName] = useState('');
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(new Date()); // Tracks the date for which habits are displayed/toggled
   const { toast } = useToast();
 
   // Fetch habit definitions
@@ -53,7 +53,6 @@ export default function HabitListComponent() {
         const fetchedHabits = snapshot.docs.map((doc) => ({
           id: doc.id,
           name: doc.data().name,
-          completed: false, // This will be overridden by dailyCompletions
           createdAt: doc.data().createdAt,
           userId: doc.data().userId,
         }));
@@ -73,9 +72,8 @@ export default function HabitListComponent() {
     return () => unsubscribe();
   }, [toast]);
 
-  // Fetch daily completions for the current date
+  // Fetch daily completions for the currentDate
   const fetchDailyCompletions = useCallback(async () => {
-    // No need to set isLoading here as definedHabits loading handles the main skeleton
     try {
       const dailyDocRef = doc(db, getDailyHabitsDocPath(currentDate));
       const docSnap = await getDoc(dailyDocRef);
@@ -83,13 +81,13 @@ export default function HabitListComponent() {
         const data = docSnap.data() as DailyHabits;
         setDailyCompletions(data.habits || {});
       } else {
-        setDailyCompletions({}); // No completions for this date yet
+        setDailyCompletions({});
       }
     } catch (error) {
       console.error('Error fetching daily habit completions:', error);
       toast({
         title: 'Error Loading Daily Progress',
-        description: 'Could not load today\'s habit progress.',
+        description: `Could not load progress for ${format(currentDate, 'yyyy-MM-dd')}.`,
         variant: 'destructive',
       });
     }
@@ -97,26 +95,28 @@ export default function HabitListComponent() {
 
   useEffect(() => {
     fetchDailyCompletions();
-  }, [fetchDailyCompletions, definedHabits]); // Refetch daily completions if defined habits change
+  }, [fetchDailyCompletions]);
 
   const handleAddHabit = async () => {
-    if (newHabitName.trim() === '') {
+    const trimmedName = newHabitName.trim();
+    if (trimmedName === '') {
       toast({ title: 'Empty Habit Name', description: 'Please enter a name for your habit.', variant: 'destructive' });
       return;
     }
-    if (definedHabits.some(h => h.name.toLowerCase() === newHabitName.trim().toLowerCase())) {
+    if (definedHabits.some(h => h.name.toLowerCase() === trimmedName.toLowerCase())) {
         toast({ title: 'Duplicate Habit', description: 'This habit name already exists.', variant: 'destructive' });
         return;
     }
 
     try {
       await addDoc(collection(db, userHabitsCollectionPath), {
-        name: newHabitName.trim(),
+        name: trimmedName,
         createdAt: serverTimestamp(),
         userId: USER_ID,
       });
       setNewHabitName('');
-      toast({ title: 'Habit Added', description: `"${newHabitName.trim()}" was successfully added.` });
+      toast({ title: 'Habit Added', description: `"${trimmedName}" was successfully added.` });
+      // The onSnapshot listener should pick up the new habit and update definedHabits
     } catch (error) {
       console.error('Error adding habit:', error);
       toast({ title: 'Error Adding Habit', description: 'Could not add the new habit.', variant: 'destructive' });
@@ -126,15 +126,21 @@ export default function HabitListComponent() {
   const handleDeleteHabit = async (habitId: string, habitName: string) => {
     try {
       await deleteDoc(doc(db, userHabitsCollectionPath, habitId));
-      // Also need to remove it from today's dailyCompletions if present, and save
+      
+      // Remove it from today's dailyCompletions if present, and save
+      // This is a bit tricky as it might affect historical data if not handled carefully.
+      // For simplicity, we'll just update today's completions.
+      // A more robust solution would be to mark the habit as "archived" rather than deleting,
+      // or to remove its entries from all dailyHabits documents (complex).
       const updatedDailyCompletions = { ...dailyCompletions };
-      delete updatedDailyCompletions[habitName]; // Use habitName as key for dailyCompletions
+      delete updatedDailyCompletions[habitName]; 
       setDailyCompletions(updatedDailyCompletions);
       
       const dailyDocRef = doc(db, getDailyHabitsDocPath(currentDate));
       await setDoc(dailyDocRef, { date: format(currentDate, 'yyyy-MM-dd'), habits: updatedDailyCompletions }, { merge: true });
 
       toast({ title: 'Habit Deleted', description: `"${habitName}" was deleted.` });
+      // onSnapshot will update the definedHabits list
     } catch (error) {
       console.error('Error deleting habit:', error);
       toast({ title: 'Error Deleting Habit', description: 'Could not delete the habit.', variant: 'destructive' });
@@ -152,7 +158,16 @@ export default function HabitListComponent() {
 
     try {
       const dailyDocRef = doc(db, getDailyHabitsDocPath(currentDate));
-      await setDoc(dailyDocRef, { date: format(currentDate, 'yyyy-MM-dd'), habits: updatedCompletions }, { merge: true });
+      // Ensure all defined habits for the day are included, even if not toggled, to maintain consistency
+      const habitsToSave: Record<string, boolean> = {};
+      definedHabits.forEach(h => {
+        // If a habit was defined but not in dailyCompletions yet for this day, mark it as false
+        habitsToSave[h.name] = updatedCompletions[h.name] || false;
+      });
+      // Ensure the toggled habit is correctly set
+      habitsToSave[habitName] = newCompletedStatus;
+
+      await setDoc(dailyDocRef, { date: format(currentDate, 'yyyy-MM-dd'), habits: habitsToSave }, { merge: true });
     } catch (error) {
       console.error('Error updating habit status:', error);
       toast({
@@ -164,7 +179,6 @@ export default function HabitListComponent() {
     }
   };
   
-
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -182,6 +196,7 @@ export default function HabitListComponent() {
     );
   }
 
+  // Combine defined habits with their completion status for the current day
   const displayHabits = definedHabits.map(habit => ({
     ...habit,
     completed: dailyCompletions[habit.name] || false,
@@ -234,3 +249,5 @@ export default function HabitListComponent() {
     </div>
   );
 }
+
+    
