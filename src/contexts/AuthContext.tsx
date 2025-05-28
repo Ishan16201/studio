@@ -7,14 +7,14 @@ import { useRouter } from 'next/navigation';
 
 interface User {
   name: string;
-  email?: string; // email is optional here as it might not always be set directly
+  email?: string;
 }
 
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   user: User | null;
-  login: (email?: string, password?: string, name?: string) => Promise<void>; // Added name parameter
+  login: (email?: string, password?: string, name?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -22,8 +22,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const LAST_ACTIVE_KEY = 'grindset_lastActiveTimestamp';
 const IS_AUTHENTICATED_KEY = 'grindset_isAuthenticated';
-const USER_DETAILS_KEY = 'grindset_userDetails'; // Key to store user details
-const INACTIVITY_LOGOUT_DURATION = 3 * 24 * 60 * 60 * 1000; // 3 days in milliseconds
+const USER_DETAILS_KEY = 'grindset_userDetails';
+const INACTIVITY_LOGOUT_DURATION = 3 * 24 * 60 * 60 * 1000; // 3 days
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -37,6 +37,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const checkAuthStatus = async () => {
+      console.log('[AuthContext] Starting auth status check...');
       setIsLoading(true);
       try {
         const storedAuth = localStorage.getItem(IS_AUTHENTICATED_KEY);
@@ -47,37 +48,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (currentlyAuth && lastActive) {
           const lastActiveTime = parseInt(lastActive, 10);
           if (Date.now() - lastActiveTime > INACTIVITY_LOGOUT_DURATION) {
-            console.log("User inactive for too long, logging out.");
+            console.log("[AuthContext] User inactive for too long, logging out.");
             currentlyAuth = false;
             localStorage.removeItem(IS_AUTHENTICATED_KEY);
             localStorage.removeItem(LAST_ACTIVE_KEY);
             localStorage.removeItem(USER_DETAILS_KEY);
-            setUser(null);
           }
         } else if (currentlyAuth && !lastActive) {
           updateLastActive();
         }
 
-
         if (currentlyAuth) {
           setIsAuthenticated(true);
           if (storedUserDetails) {
-            setUser(JSON.parse(storedUserDetails));
+            const parsedUser = JSON.parse(storedUserDetails);
+            setUser(parsedUser);
+            console.log('[AuthContext] User authenticated from localStorage. User:', parsedUser);
           } else {
-            // Fallback if no details are stored (e.g., old session before this change)
-            setUser({ name: "User" });
+            // Fallback, though USER_DETAILS_KEY should exist if IS_AUTHENTICATED_KEY is true
+            const fallbackUser = { name: "User" };
+            setUser(fallbackUser);
+            console.log('[AuthContext] User authenticated from localStorage, but no details found. Using fallback. User:', fallbackUser);
           }
           updateLastActive();
         } else {
           setIsAuthenticated(false);
           setUser(null);
+          console.log('[AuthContext] User not authenticated or session expired.');
         }
       } catch (error) {
-        console.error("Error during auth status check:", error);
-        // In case of error, assume not authenticated and finish loading
+        console.error("[AuthContext] Error during auth status check:", error);
         setIsAuthenticated(false);
         setUser(null);
       } finally {
+        console.log('[AuthContext] Finished auth status check. isLoading will be set to false.');
         setIsLoading(false);
       }
     };
@@ -86,31 +90,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 
   const login = async (email?: string, password?: string, name?: string) => {
-    console.log("Simulating login for:", name || email);
+    console.log("[AuthContext] Simulating login for:", name || email);
     setIsLoading(true);
     await new Promise(resolve => setTimeout(resolve, 500));
     setIsAuthenticated(true);
     
-    const currentUserName = name || (user?.name) || "User"; // Use provided name, existing name, or fallback
+    const currentUserName = name || (user?.name) || "User";
     const loggedInUser: User = { name: currentUserName, email: email };
     setUser(loggedInUser);
 
     localStorage.setItem(IS_AUTHENTICATED_KEY, 'true');
-    localStorage.setItem(USER_DETAILS_KEY, JSON.stringify(loggedInUser)); // Store user details
+    localStorage.setItem(USER_DETAILS_KEY, JSON.stringify(loggedInUser));
     updateLastActive();
     setIsLoading(false);
+    console.log("[AuthContext] Login successful, navigating to /");
     router.push('/');
   };
 
   const logout = async () => {
+    console.log("[AuthContext] Logging out...");
     setIsLoading(true);
     await new Promise(resolve => setTimeout(resolve, 300));
     setIsAuthenticated(false);
     setUser(null);
     localStorage.removeItem(IS_AUTHENTICATED_KEY);
     localStorage.removeItem(LAST_ACTIVE_KEY);
-    localStorage.removeItem(USER_DETAILS_KEY); // Clear user details on logout
+    localStorage.removeItem(USER_DETAILS_KEY);
     setIsLoading(false);
+    console.log("[AuthContext] Logout complete, navigating to /login");
     router.push('/login');
   };
 
@@ -121,7 +128,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     };
     window.addEventListener('focus', activityHandler);
-    window.addEventListener('mousemove', activityHandler); // More events for activity
+    window.addEventListener('mousemove', activityHandler);
     window.addEventListener('keydown', activityHandler);
     return () => {
       window.removeEventListener('focus', activityHandler);
