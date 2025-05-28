@@ -59,8 +59,9 @@ function HomePageContent() {
     <div className="min-h-screen text-foreground p-0">
       <header className="mb-6 md:mb-8">
         <h1 className="text-3xl sm:text-4xl font-bold text-foreground">Grindset</h1>
-        {user && <p className="text-xl text-muted-foreground mt-1">Welcome back, {user.name}!</p>}
-        {!user && <p className="text-muted-foreground">Your personal dashboard for focus and growth.</p>}
+        <p className="text-xl text-muted-foreground mt-1">
+          {user && user.name ? `Welcome back, ${user.name}!` : 'Your personal dashboard for focus and growth.'}
+        </p>
       </header>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">

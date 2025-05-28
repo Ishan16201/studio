@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -10,7 +11,7 @@ interface AudioPlayerProps {
   trackId: string; // To ensure unique state for multiple players on a page
 }
 
-const formatTime = (time: number) => {
+const formatTime = (time: number): string => {
   const minutes = Math.floor(time / 60);
   const seconds = Math.floor(time % 60);
   return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
