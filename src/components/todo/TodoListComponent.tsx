@@ -1,60 +1,169 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PlusCircle, Trash2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { PlusCircle, Trash2, AlertTriangle } from 'lucide-react';
 import type { TodoItem } from '@/types';
-import { Timestamp } from 'firebase/firestore'; // For client-side date
+import { db, USER_ID } from '@/lib/firebase'; // Assuming USER_ID is exported for simplicity
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  Timestamp,
+  serverTimestamp,
+} from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
 
 interface TodoListComponentProps {
   showTitle?: boolean;
   maxHeight?: string;
-  enableAdding?: boolean;
-  initialTasks?: TodoItem[];
+  enableAdding?: boolean; // Keep this if you want to control add functionality specifically
 }
 
-export default function TodoListComponent({ 
-  showTitle = true, 
+export default function TodoListComponent({
+  showTitle = true,
   maxHeight = "max-h-[300px]",
   enableAdding = true,
-  initialTasks = []
 }: TodoListComponentProps) {
-  const [tasks, setTasks] = useState<TodoItem[]>(initialTasks.length > 0 ? initialTasks : [
-    { id: '1', text: 'Finish report', completed: false, createdAt: Timestamp.now() },
-    { id: '2', text: 'Exercise', completed: true, createdAt: Timestamp.now() },
-    { id: '3', text: 'Read for 30 minutes', completed: false, createdAt: Timestamp.now() },
-  ]);
+  const [tasks, setTasks] = useState<TodoItem[]>([]);
   const [newTaskText, setNewTaskText] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
 
-  const addTask = () => {
-    if (newTaskText.trim() === '') return;
-    const newTask: TodoItem = {
-      id: Date.now().toString(), // Simple unique ID for client-side
-      text: newTaskText,
-      completed: false,
-      createdAt: Timestamp.now(),
-    };
-    setTasks([...tasks, newTask]);
-    setNewTaskText('');
-  };
-
-  const toggleTask = (id: string) => {
-    setTasks(
-      tasks.map((task) =>
-        task.id === id ? { ...task, completed: !task.completed } : task
-      )
+  useEffect(() => {
+    setIsLoading(true);
+    setError(null);
+    const tasksCol = collection(db, 'todos');
+    const q = query(
+      tasksCol,
+      where('userId', '==', USER_ID),
+      orderBy('createdAt', 'desc')
     );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const fetchedTasks = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...(doc.data() as Omit<TodoItem, 'id'>),
+        }));
+        setTasks(fetchedTasks);
+        setIsLoading(false);
+      },
+      (err) => {
+        console.error('Error fetching tasks:', err);
+        setError('Failed to load tasks. Please try again.');
+        toast({
+          title: 'Error',
+          description: 'Could not load tasks.',
+          variant: 'destructive',
+        });
+        setIsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [toast]);
+
+  const addTask = async () => {
+    if (newTaskText.trim() === '') return;
+    try {
+      await addDoc(collection(db, 'todos'), {
+        text: newTaskText,
+        completed: false,
+        createdAt: serverTimestamp(),
+        userId: USER_ID,
+      });
+      setNewTaskText('');
+      // toast({ title: 'Task Added', description: `"${newTaskText}" was added.` });
+    } catch (err) {
+      console.error('Error adding task:', err);
+      toast({
+        title: 'Error',
+        description: 'Could not add task.',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const deleteTask = (id: string) => {
-    setTasks(tasks.filter((task) => task.id !== id));
+  const toggleTask = async (id: string, currentCompleted: boolean) => {
+    const taskRef = doc(db, 'todos', id);
+    try {
+      await updateDoc(taskRef, { completed: !currentCompleted });
+      // Optimistic update handled by onSnapshot, or manual:
+      // setTasks(tasks.map(task => task.id === id ? { ...task, completed: !task.completed } : task));
+    } catch (err) {
+      console.error('Error toggling task:', err);
+      toast({
+        title: 'Error',
+        description: 'Could not update task status.',
+        variant: 'destructive',
+      });
+    }
   };
 
-  // For standalone page, fetch from Firebase, etc.
-  // For now, this component is self-contained with local state.
+  const deleteTask = async (id: string) => {
+    const taskRef = doc(db, 'todos', id);
+    try {
+      await deleteDoc(taskRef);
+      // toast({ title: 'Task Deleted' });
+    } catch (err) {
+      console.error('Error deleting task:', err);
+      toast({
+        title: 'Error',
+        description: 'Could not delete task.',
+        variant: 'destructive',
+      });
+    }
+  };
+  
+  const sortedTasks = [...tasks].sort((a, b) => {
+    if (a.completed === b.completed) {
+      // If both are same completed status, sort by creation time (newest first)
+      // Assuming createdAt is a Firestore Timestamp
+      return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+    }
+    return a.completed ? 1 : -1; // Incomplete tasks first
+  });
+
+
+  if (isLoading) {
+    return (
+      <div className="w-full space-y-3 p-1">
+        {showTitle && <Skeleton className="h-7 w-1/3 mb-4" />}
+        {enableAdding && (
+          <div className="flex gap-2 mb-4">
+            <Skeleton className="h-10 flex-grow" />
+            <Skeleton className="h-10 w-10" />
+          </div>
+        )}
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="w-full p-4 text-center text-destructive-foreground bg-destructive/80 rounded-md">
+        <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
+        <p className="font-semibold">Error Loading Tasks</p>
+        <p className="text-sm">{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full">
@@ -67,7 +176,7 @@ export default function TodoListComponent({
             value={newTaskText}
             onChange={(e) => setNewTaskText(e.target.value)}
             placeholder="Add a new task..."
-            className="bg-input text-foreground placeholder:text-muted-foreground flex-grow"
+            className="bg-input text-foreground placeholder:text-muted-foreground flex-grow text-sm"
             onKeyPress={(e) => e.key === 'Enter' && addTask()}
           />
           <Button onClick={addTask} variant="default" size="icon" aria-label="Add task">
@@ -76,38 +185,38 @@ export default function TodoListComponent({
         </div>
       )}
 
-      <ScrollArea className={`${maxHeight} pr-3`}>
-        {tasks.length === 0 && <p className="text-muted-foreground text-center py-4">No tasks yet. Add some!</p>}
+      <ScrollArea className={`${maxHeight} pr-1`}> {/* Reduced pr for tighter mobile*/}
+        {sortedTasks.length === 0 && <p className="text-muted-foreground text-center py-4">No tasks yet. Add some!</p>}
         <ul className="space-y-2">
-          {tasks.map((task) => (
+          {sortedTasks.map((task) => (
             <li
               key={task.id}
               className={`flex items-center justify-between p-3 rounded-md transition-colors
-                          ${task.completed ? 'bg-green-700/20 hover:bg-green-700/30' : 'bg-card hover:bg-muted/50'}`}
+                          ${task.completed ? 'bg-green-700/10 hover:bg-green-700/20 opacity-70' : 'bg-card hover:bg-card/80'}`}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 overflow-hidden">
                 <Checkbox
                   id={`task-${task.id}`}
                   checked={task.completed}
-                  onCheckedChange={() => toggleTask(task.id)}
+                  onCheckedChange={() => toggleTask(task.id, task.completed)}
                   aria-labelledby={`task-label-${task.id}`}
                 />
                 <label
                   id={`task-label-${task.id}`}
                   htmlFor={`task-${task.id}`}
-                  className={`cursor-pointer text-sm ${
+                  className={`cursor-pointer text-sm truncate ${
                     task.completed ? 'line-through text-muted-foreground' : 'text-foreground'
                   }`}
                 >
                   {task.text}
                 </label>
               </div>
-              {enableAdding && (
+              {enableAdding && ( // Only show delete if adding is enabled (full todo page vs widget)
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => deleteTask(task.id)}
-                  className="text-muted-foreground hover:text-destructive"
+                  className="text-muted-foreground hover:text-destructive flex-shrink-0 ml-2"
                   aria-label={`Delete task: ${task.text}`}
                 >
                   <Trash2 className="h-4 w-4" />

@@ -26,8 +26,9 @@ export interface PomodoroState {
 }
 
 export interface TodoItem {
-  id: string;
+  id: string; // Firestore document ID
   text: string;
   completed: boolean;
-  createdAt: Timestamp | Date;
+  createdAt: Timestamp; // Always Firestore Timestamp when fetched/saved
+  userId?: string; // To associate tasks with a user
 }

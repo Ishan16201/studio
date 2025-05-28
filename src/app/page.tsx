@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button';
 import { ArrowRight, BookOpenText, History, Users, CalendarDays, CheckSquare, Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import { format } from 'date-fns';
-import TodoListComponent from '@/components/todo/TodoListComponent'; // Import the new component
-import { cn } from '@/lib/utils'; // Added this import
+import TodoListComponent from '@/components/todo/TodoListComponent';
+import { cn } from '@/lib/utils';
 
 interface DashboardWidgetProps {
   title: string;
@@ -14,7 +14,7 @@ interface DashboardWidgetProps {
   icon?: React.ElementType;
   children?: React.ReactNode;
   className?: string;
-  borderColor?: string; // e.g., 'border-cyan-500'
+  borderColor?: string; 
 }
 
 function DashboardWidget({ title, description, href, icon: Icon, children, className, borderColor }: DashboardWidgetProps) {
@@ -27,7 +27,7 @@ function DashboardWidget({ title, description, href, icon: Icon, children, class
         </div>
         {description && <CardDescription className="text-xs text-muted-foreground">{description}</CardDescription>}
       </CardHeader>
-      <CardContent className="flex-grow flex flex-col justify-between">
+      <CardContent className="flex-grow flex flex-col justify-between p-4 sm:p-6"> {/* Adjusted padding */}
         {children}
         {href && (
           <Button asChild variant="outline" size="sm" className="mt-auto w-full group border-primary/50 hover:bg-primary/10">
@@ -47,38 +47,27 @@ function DashboardWidget({ title, description, href, icon: Icon, children, class
 
 export default function HomePage() {
   const today = new Date();
-  const formattedDate = format(today, "eeee, MMMM do"); // Tuesday, April 30th
+  const formattedDate = format(today, "eeee, MMMM do");
   
-  const sampleTasks = [
-    { id: '1', text: 'Finish quarterly report', completed: false, createdAt: new Date() },
-    { id: '2', text: '30 min morning exercise', completed: true, createdAt: new Date() },
-    { id: '3', text: 'Read for 20 minutes before bed', completed: false, createdAt: new Date() },
-  ];
-
   return (
-    <div className="min-h-screen text-foreground p-0"> {/* Removed gradient and reduced padding */}
-      {/* Header is now part of AppLayout */}
-      {/* <header className="text-left mb-6 md:mb-8 pt-0">
-        <h1 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">
-          Dashboard
-        </h1>
-        <p className="mt-2 text-md text-muted-foreground">
-          Welcome back! Here's your overview for today.
-        </p>
-      </header> */}
-
+    <div className="min-h-screen text-foreground p-0">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         <DashboardWidget
           title="Daily Tasks"
-          borderColor="border-cyan-500"
+          borderColor="border-primary" // Updated border color
           className="lg:col-span-1 md:row-span-2"
         >
-          <TodoListComponent showTitle={false} maxHeight="max-h-[280px] sm:max-h-[320px]" enableAdding={true} initialTasks={sampleTasks} />
+          {/* TodoListComponent will now fetch its own data from Firebase */}
+          <TodoListComponent 
+            showTitle={false} 
+            maxHeight="max-h-[280px] sm:max-h-[320px] md:max-h-[calc(100%-4rem)]" // More dynamic height
+            enableAdding={true} 
+          />
         </DashboardWidget>
 
         <DashboardWidget
           title={formattedDate}
-          borderColor="border-red-500"
+          borderColor="border-accent" // Updated border color
           className="lg:col-span-1 flex items-center justify-center text-center min-h-[150px] md:min-h-full"
         >
           <div className="p-4">
@@ -93,27 +82,24 @@ export default function HomePage() {
           description="Monitor your daily habits."
           href="/habits"
           icon={History}
-          borderColor="border-green-500"
+          borderColor="border-green-500" // Kept original for variety
           className="lg:col-span-1 min-h-[150px] md:min-h-full"
         >
-          <div className="text-center py-4">
-             <p className="text-sm text-muted-foreground mb-3">Check in on your habit progress or add a new one.</p>
-            {/* Could show a mini progress bar or stats here */}
+          <div className="text-center py-4 px-2"> {/* Added padding */}
+             <p className="text-sm text-muted-foreground mb-3">Check in on your habit progress or start tracking.</p>
           </div>
         </DashboardWidget>
-
 
         <DashboardWidget
           title="Journal"
           description="Reflect and record your thoughts."
           href="/journal"
           icon={BookOpenText}
-          borderColor="border-purple-500"
+          borderColor="border-purple-500" // Kept original
           className="lg:col-span-1 md:col-span-2 lg:col-start-2 min-h-[150px] md:min-h-full"
         >
-          <div className="text-center py-4">
-            <p className="text-sm text-muted-foreground mb-3">A new entry awaits your insights.</p>
-            {/* Could show "Suggested new entry" or last entry date */}
+          <div className="text-center py-4 px-2"> {/* Added padding */}
+            <p className="text-sm text-muted-foreground mb-3">A new entry awaits your insights for today.</p>
           </div>
         </DashboardWidget>
         
@@ -122,29 +108,28 @@ export default function HomePage() {
           description="Your schedule at a glance."
           href="/calendar"
           icon={CalendarDays}
-          borderColor="border-blue-500"
+          borderColor="border-blue-500" // Kept original
            className="lg:col-span-1 min-h-[150px] md:min-h-full"
         >
-          <div className="text-center py-4">
-            <p className="text-sm text-muted-foreground mb-3">Check your calendar for meetings and events.</p>
-            {/* Could show next event */}
+          <div className="text-center py-4 px-2"> {/* Added padding */}
+            <p className="text-sm text-muted-foreground mb-3">Check your calendar for important dates and events.</p>
           </div>
         </DashboardWidget>
 
          <DashboardWidget
           title="Focus Tools"
           description="Pomodoro & Meditation."
-          href="/pomodoro" // Or a new /tools page
+          // href="/pomodoro" // Combined into one widget, individual links below
           icon={Sparkles}
-          borderColor="border-yellow-500"
+          borderColor="border-yellow-500" // Kept original
           className="lg:col-span-1 md:col-span-2 lg:col-span-3 min-h-[150px] md:min-h-full"
         >
-          <div className="grid grid-cols-2 gap-4 p-4">
-            <Link href="/pomodoro" className="block p-4 bg-secondary/50 hover:bg-secondary rounded-lg text-center">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4">
+            <Link href="/pomodoro" className="block p-4 bg-card hover:bg-secondary rounded-lg text-center border hover:border-primary transition-colors">
               <CardTitle className="text-md font-semibold">Pomodoro</CardTitle>
               <CardDescription className="text-xs">Boost Focus</CardDescription>
             </Link>
-            <Link href="/meditation" className="block p-4 bg-secondary/50 hover:bg-secondary rounded-lg text-center">
+            <Link href="/meditation" className="block p-4 bg-card hover:bg-secondary rounded-lg text-center border hover:border-primary transition-colors">
                 <CardTitle className="text-md font-semibold">Meditate</CardTitle>
               <CardDescription className="text-xs">Find Calm</CardDescription>
             </Link>
@@ -153,7 +138,7 @@ export default function HomePage() {
 
       </div>
       
-      <footer className="text-center mt-10 py-5 text-xs text-muted-foreground">
+      <footer className="text-center mt-8 sm:mt-10 py-5 text-xs text-muted-foreground">
         <p>&copy; {new Date().getFullYear()} Grindset. Stay focused.</p>
       </footer>
     </div>

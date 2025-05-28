@@ -9,7 +9,7 @@ import { useAutosave } from '@/hooks/useAutosave';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const JOURNAL_DOC_PATH = `journal/${USER_ID}/entry/main`; // Changed path
+const JOURNAL_DOC_PATH = `journal/${USER_ID}/entry/main`;
 
 export default function JournalEditor() {
   const [content, setContent] = useState<string>('');
@@ -17,7 +17,6 @@ export default function JournalEditor() {
   const [isDirty, setIsDirty] = useState<boolean>(false);
   const { toast } = useToast();
 
-  // Fetch initial journal content
   useEffect(() => {
     const fetchJournal = async () => {
       try {
@@ -47,10 +46,9 @@ export default function JournalEditor() {
       await setDoc(docRef, {
         content: currentContent,
         lastUpdated: serverTimestamp(),
+        userId: USER_ID, // Good practice to include userId
       }, { merge: true });
-      setIsDirty(false); // Reset dirty state after successful save
-      // Optional: Show a subtle save confirmation
-      // toast({ title: "Saved", description: "Your journal entry has been saved." });
+      setIsDirty(false); 
     } catch (error) {
       console.error('Error saving journal:', error);
       toast({
@@ -64,18 +62,18 @@ export default function JournalEditor() {
   useAutosave<string>({
     data: content,
     onSave: handleSave,
-    interval: 2500, // Save every 2.5 seconds
-    isDirty: isDirty, // Only save if content has changed
+    interval: 2500, 
+    isDirty: isDirty,
   });
 
   const handleChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setContent(event.target.value);
-    setIsDirty(true); // Mark as dirty when content changes
+    setIsDirty(true);
   };
 
   if (isLoading) {
     return (
-      <div className="p-6 h-[calc(100vh-250px)] md:h-[500px]">
+      <div className="p-4 sm:p-6 h-[calc(100vh-200px)] sm:h-[calc(100vh-250px)] md:h-[500px]">
         <Skeleton className="h-full w-full rounded-md" />
       </div>
     );
@@ -86,7 +84,7 @@ export default function JournalEditor() {
       value={content}
       onChange={handleChange}
       placeholder="What's on your mind? Your progress, your struggles, your wins... Type it all out."
-      className="w-full h-[calc(100vh-250px)] md:h-[500px] p-6 text-base md:text-lg border-0 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none rounded-b-xl"
+      className="w-full h-[calc(100vh-200px)] sm:h-[calc(100vh-250px)] md:h-[500px] p-4 sm:p-6 text-sm sm:text-base md:text-lg border-0 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none rounded-b-xl bg-card text-card-foreground"
       aria-label="Journal Entry"
     />
   );

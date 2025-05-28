@@ -9,13 +9,15 @@ interface AppLayoutProps {
 
 export default function AppLayout({ children }: AppLayoutProps) {
   return (
+    // defaultOpen={false} for mobile to start closed, true for desktop default open
+    // The useIsMobile hook inside SidebarProvider handles this logic better
     <SidebarProvider defaultOpen={true} collapsible="icon">
-      <Sidebar variant="sidebar" side="left" className="border-r border-sidebar-border">
+      <Sidebar variant="sidebar" side="left" className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
         <SidebarNavigation />
       </Sidebar>
       <SidebarInset className="bg-background"> {/* This is the main content area */}
         <HeaderComponent />
-        <main className="flex-grow p-4 sm:p-6 md:p-8">
+        <main className="flex-grow p-4 sm:p-6 md:p-8 overflow-x-hidden"> {/* Added overflow-x-hidden for safety */}
           {children}
         </main>
       </SidebarInset>
