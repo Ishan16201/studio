@@ -68,9 +68,10 @@ export default function HabitListComponent() {
         console.error('Error fetching habit definitions:', error);
         toast({
           title: 'Error Loading Habit Definitions',
-          description: 'Could not load your habit list. Please try again.',
+          description: 'Could not load your habit list. Please check your connection or browser storage.',
           variant: 'destructive',
         });
+        setDefinedHabits([]); // Fallback to an empty list
         setIsLoading(false);
       }
     );
@@ -201,7 +202,7 @@ export default function HabitListComponent() {
 
   return (
     <div className="space-y-4">
-      {displayHabits.length === 0 && (
+      {displayHabits.length === 0 && !isLoading && ( // Also check !isLoading here
         <p className="text-center text-muted-foreground py-8">No habits defined yet. Add your first habit below!</p>
       )}
       {displayHabits.map((habit) => (
