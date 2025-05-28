@@ -6,11 +6,11 @@ import HabitListComponent from '@/components/habits/HabitList';
 import HabitActivityCalendar from '@/components/habits/HabitActivityCalendar';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { ListChecks, CalendarSearch, Info } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, startOfYear, endOfYear } from 'date-fns';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import type { Habit } from '@/types';
 import { db, USER_ID } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, getDocs, where, startOfYear, endOfYear } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, getDocs, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 
