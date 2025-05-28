@@ -26,9 +26,14 @@ import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PlusCircle, Trash2 } from 'lucide-react';
 
+// Corrected path structure:
+// Top-level collection: 'userHabitsData'
+// Document per user: USER_ID
+// Subcollection: 'dailyLogs'
+// Document per day: 'YYYY-MM-DD' (dateString)
 const getDailyHabitsDocPath = (date: Date) => {
   const dateString = format(date, 'yyyy-MM-dd');
-  return `dailyHabits/${USER_ID}/${dateString}`; 
+  return `userHabitsData/${USER_ID}/dailyLogs/${dateString}`;
 };
 
 const userHabitsCollectionPath = `userHabits/${USER_ID}/habits`;
@@ -78,7 +83,7 @@ export default function HabitListComponent() {
       const dailyDocRef = doc(db, getDailyHabitsDocPath(currentDate));
       const docSnap = await getDoc(dailyDocRef);
       if (docSnap.exists()) {
-        const data = docSnap.data() as DailyHabits;
+        const data = docSnap.data() as DailyHabits; // DailyHabits type has 'date' and 'habits'
         setDailyCompletions(data.habits || {});
       } else {
         setDailyCompletions({});
@@ -127,20 +132,15 @@ export default function HabitListComponent() {
     try {
       await deleteDoc(doc(db, userHabitsCollectionPath, habitId));
       
-      // Remove it from today's dailyCompletions if present, and save
-      // This is a bit tricky as it might affect historical data if not handled carefully.
-      // For simplicity, we'll just update today's completions.
-      // A more robust solution would be to mark the habit as "archived" rather than deleting,
-      // or to remove its entries from all dailyHabits documents (complex).
       const updatedDailyCompletions = { ...dailyCompletions };
       delete updatedDailyCompletions[habitName]; 
       setDailyCompletions(updatedDailyCompletions);
       
       const dailyDocRef = doc(db, getDailyHabitsDocPath(currentDate));
+      // Ensure the document contains the date field as per DailyHabits type
       await setDoc(dailyDocRef, { date: format(currentDate, 'yyyy-MM-dd'), habits: updatedDailyCompletions }, { merge: true });
 
       toast({ title: 'Habit Deleted', description: `"${habitName}" was deleted.` });
-      // onSnapshot will update the definedHabits list
     } catch (error) {
       console.error('Error deleting habit:', error);
       toast({ title: 'Error Deleting Habit', description: 'Could not delete the habit.', variant: 'destructive' });
@@ -154,19 +154,17 @@ export default function HabitListComponent() {
       ...dailyCompletions,
       [habitName]: newCompletedStatus,
     };
-    setDailyCompletions(updatedCompletions); // Optimistic update
+    setDailyCompletions(updatedCompletions); 
 
     try {
       const dailyDocRef = doc(db, getDailyHabitsDocPath(currentDate));
-      // Ensure all defined habits for the day are included, even if not toggled, to maintain consistency
       const habitsToSave: Record<string, boolean> = {};
       definedHabits.forEach(h => {
-        // If a habit was defined but not in dailyCompletions yet for this day, mark it as false
         habitsToSave[h.name] = updatedCompletions[h.name] || false;
       });
-      // Ensure the toggled habit is correctly set
       habitsToSave[habitName] = newCompletedStatus;
 
+      // Ensure the document structure includes the 'date' field.
       await setDoc(dailyDocRef, { date: format(currentDate, 'yyyy-MM-dd'), habits: habitsToSave }, { merge: true });
     } catch (error) {
       console.error('Error updating habit status:', error);
@@ -175,7 +173,7 @@ export default function HabitListComponent() {
         description: 'Could not update habit status. Your change was not saved.',
         variant: 'destructive',
       });
-      setDailyCompletions(originalCompletions); // Revert UI
+      setDailyCompletions(originalCompletions); 
     }
   };
   
@@ -196,7 +194,6 @@ export default function HabitListComponent() {
     );
   }
 
-  // Combine defined habits with their completion status for the current day
   const displayHabits = definedHabits.map(habit => ({
     ...habit,
     completed: dailyCompletions[habit.name] || false,
@@ -249,5 +246,3 @@ export default function HabitListComponent() {
     </div>
   );
 }
-
-    

@@ -20,6 +20,9 @@ interface DailyLogData {
 }
 
 const userHabitsCollectionPath = `userHabits/${USER_ID}/habits`;
+// Corrected path for querying daily logs, corresponds to the structure used in HabitListComponent
+const userDailyLogsCollectionPath = `userHabitsData/${USER_ID}/dailyLogs`;
+
 
 function HabitsPageContent() {
   const today = format(new Date(), "eeee, MMMM do"); 
@@ -70,8 +73,10 @@ function HabitsPageContent() {
         const yearStart = startOfYear(new Date(currentYear, 0, 1));
         const yearEnd = endOfYear(new Date(currentYear, 11, 31));
 
-        const dailyHabitsCol = collection(db, `dailyHabits/${USER_ID}`);
-        const qLogs = query(dailyHabitsCol, 
+        // Use the corrected collection path for daily logs
+        const dailyLogsColRef = collection(db, userDailyLogsCollectionPath);
+        const qLogs = query(dailyLogsColRef, 
+                        // The documents in 'userDailyLogsCollectionPath' have a 'date' field.
                         where('date', '>=', format(yearStart, 'yyyy-MM-dd')),
                         where('date', '<=', format(yearEnd, 'yyyy-MM-dd'))
                        );
@@ -79,6 +84,7 @@ function HabitsPageContent() {
         
         const logs: DailyLogData[] = snapshot.docs.map(doc => {
           const docData = doc.data();
+          // Ensure the document structure matches DailyLogData, especially 'habits' field
           return { date: docData.date, habits: docData.habits as Record<string, boolean> || {} };
         });
         setAllDailyLogsForYear(logs);
@@ -98,7 +104,7 @@ function HabitsPageContent() {
   }, [currentYear, toast]);
 
   return (
-    <div className="container mx-auto max-w-4xl p-4 md:p-8"> {/* Increased max-width */}
+    <div className="container mx-auto max-w-4xl p-4 md:p-8"> 
       
       <Card className="shadow-xl rounded-xl mb-8">
         <CardHeader className="text-center bg-primary text-primary-foreground rounded-t-xl p-4 sm:p-6">
@@ -175,5 +181,3 @@ export default function HabitsPage() {
     </ProtectedRoute>
   );
 }
-
-    
