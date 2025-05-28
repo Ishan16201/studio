@@ -10,9 +10,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { UserPlus } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast'; // Import useToast
-import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
-import { useRouter } from 'next/navigation'; // Import useRouter
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'next/navigation';
 
 const registerSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -25,7 +25,7 @@ type RegisterFormValues = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
   const { toast } = useToast();
-  const { login, isLoading } = useAuth(); // Using login to simulate for now
+  const { login, isLoading } = useAuth();
   const router = useRouter();
 
   const form = useForm<RegisterFormValues>({
@@ -47,9 +47,8 @@ export default function RegisterPage() {
       description: "Account creation simulated. Logging you in...",
     });
     try {
-      // In a real app, after successful Firebase registration, you'd often sign the user in.
-      // Here, we directly call the login simulation from AuthContext.
-      await login(data.email, data.password); 
+      // Pass the name to the login function
+      await login(data.email, data.password, data.name); 
       // router.push('/'); // Redirect to dashboard is handled by login() in AuthContext
     } catch (error) {
       console.error("Simulated registration/login failed:", error);

@@ -7,14 +7,14 @@ import { useRouter } from 'next/navigation';
 
 interface User {
   name: string;
-  // Add other user properties here, e.g., email
+  email?: string; // email is optional here as it might not always be set directly
 }
 
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   user: User | null;
-  login: (email?: string, password?: string) => Promise<void>;
+  login: (email?: string, password?: string, name?: string) => Promise<void>; // Added name parameter
   logout: () => Promise<void>;
 }
 
@@ -22,6 +22,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const LAST_ACTIVE_KEY = 'grindset_lastActiveTimestamp';
 const IS_AUTHENTICATED_KEY = 'grindset_isAuthenticated';
+const USER_DETAILS_KEY = 'grindset_userDetails'; // Key to store user details
 const INACTIVITY_LOGOUT_DURATION = 3 * 24 * 60 * 60 * 1000; // 3 days in milliseconds
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -39,6 +40,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsLoading(true);
       const storedAuth = localStorage.getItem(IS_AUTHENTICATED_KEY);
       const lastActive = localStorage.getItem(LAST_ACTIVE_KEY);
+      const storedUserDetails = localStorage.getItem(USER_DETAILS_KEY);
       let currentlyAuth = storedAuth === 'true';
 
       if (currentlyAuth && lastActive) {
@@ -48,23 +50,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           currentlyAuth = false;
           localStorage.removeItem(IS_AUTHENTICATED_KEY);
           localStorage.removeItem(LAST_ACTIVE_KEY);
+          localStorage.removeItem(USER_DETAILS_KEY);
           setUser(null);
         }
       } else if (currentlyAuth && !lastActive) {
-        // If authenticated but no last active timestamp, set it now
         updateLastActive();
       }
 
 
       if (currentlyAuth) {
         setIsAuthenticated(true);
-        // In a real app, fetch user details here. For now, mock it.
-        setUser({ name: "Alex Grindset" }); // Placeholder name
-        updateLastActive(); // Update last active time on load if authenticated
+        if (storedUserDetails) {
+          setUser(JSON.parse(storedUserDetails));
+        } else {
+          // Fallback if no details are stored (e.g., old session before this change)
+          setUser({ name: "User" }); 
+        }
+        updateLastActive();
       } else {
         setIsAuthenticated(false);
         setUser(null);
-        // No need to redirect here, ProtectedRoute will handle it
       }
       setIsLoading(false);
     };
@@ -72,15 +77,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
 
-  const login = async (email?: string, password?: string) => {
-    console.log("Simulating login with:", email);
+  const login = async (email?: string, password?: string, name?: string) => {
+    console.log("Simulating login for:", name || email);
     setIsLoading(true);
     await new Promise(resolve => setTimeout(resolve, 500));
     setIsAuthenticated(true);
-    // Mock user, replace with actual user data from Firebase Auth in a real app
-    const mockUser: User = { name: "Alex Grindset" }; // Placeholder name
-    setUser(mockUser);
+    
+    const currentUserName = name || (user?.name) || "User"; // Use provided name, existing name, or fallback
+    const loggedInUser: User = { name: currentUserName, email: email };
+    setUser(loggedInUser);
+
     localStorage.setItem(IS_AUTHENTICATED_KEY, 'true');
+    localStorage.setItem(USER_DETAILS_KEY, JSON.stringify(loggedInUser)); // Store user details
     updateLastActive();
     setIsLoading(false);
     router.push('/');
@@ -93,24 +101,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
     localStorage.removeItem(IS_AUTHENTICATED_KEY);
     localStorage.removeItem(LAST_ACTIVE_KEY);
+    localStorage.removeItem(USER_DETAILS_KEY); // Clear user details on logout
     setIsLoading(false);
     router.push('/login');
   };
 
-  // Update last active timestamp on user activity (could be expanded)
-  // For simplicity, we mainly update on load when authenticated and on login.
-  // More robust activity tracking could involve listening to global events.
   useEffect(() => {
     const activityHandler = () => {
       if (isAuthenticated) {
         updateLastActive();
       }
     };
-    // Example: update on window focus or specific interactions
     window.addEventListener('focus', activityHandler);
-    // Add other event listeners if needed e.g. mousemove, keydown
+    window.addEventListener('mousemove', activityHandler); // More events for activity
+    window.addEventListener('keydown', activityHandler);
     return () => {
       window.removeEventListener('focus', activityHandler);
+      window.removeEventListener('mousemove', activityHandler);
+      window.removeEventListener('keydown', activityHandler);
     };
   }, [isAuthenticated]);
 
