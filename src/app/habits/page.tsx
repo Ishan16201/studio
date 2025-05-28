@@ -6,11 +6,11 @@ import HabitListComponent from '@/components/habits/HabitList';
 import HabitActivityCalendar from '@/components/habits/HabitActivityCalendar';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { ListChecks, CalendarSearch, Info } from 'lucide-react';
-import { format, startOfYear, endOfYear } from 'date-fns';
+import { format, startOfYear, endOfYear, parseISO } from 'date-fns';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import type { Habit } from '@/types';
 import { db, USER_ID } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, getDocs, where } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, getDocs, where, doc, setDoc, getDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -20,7 +20,6 @@ interface DailyLogData {
 }
 
 const userHabitsCollectionPath = `userHabits/${USER_ID}/habits`;
-// Corrected path for querying daily logs, corresponds to the structure used in HabitListComponent
 const userDailyLogsCollectionPath = `userHabitsData/${USER_ID}/dailyLogs`;
 
 
@@ -65,18 +64,14 @@ function HabitsPageContent() {
     return () => unsubscribe();
   }, [toast]);
 
-  // Fetch all daily logs for the current year once
-  useEffect(() => {
-    const fetchAllYearlyLogs = async () => {
+  const fetchAllYearlyLogs = async () => {
       setIsLoadingLogs(true);
       try {
         const yearStart = startOfYear(new Date(currentYear, 0, 1));
         const yearEnd = endOfYear(new Date(currentYear, 11, 31));
 
-        // Use the corrected collection path for daily logs
         const dailyLogsColRef = collection(db, userDailyLogsCollectionPath);
         const qLogs = query(dailyLogsColRef, 
-                        // The documents in 'userDailyLogsCollectionPath' have a 'date' field.
                         where('date', '>=', format(yearStart, 'yyyy-MM-dd')),
                         where('date', '<=', format(yearEnd, 'yyyy-MM-dd'))
                        );
@@ -84,7 +79,6 @@ function HabitsPageContent() {
         
         const logs: DailyLogData[] = snapshot.docs.map(doc => {
           const docData = doc.data();
-          // Ensure the document structure matches DailyLogData, especially 'habits' field
           return { date: docData.date, habits: docData.habits as Record<string, boolean> || {} };
         });
         setAllDailyLogsForYear(logs);
@@ -100,8 +94,70 @@ function HabitsPageContent() {
       }
     };
 
+  // Fetch all daily logs for the current year once
+  useEffect(() => {
     fetchAllYearlyLogs();
   }, [currentYear, toast]);
+
+
+  const handleTogglePastHabit = async (date: Date, habitName: string, currentStatus: boolean) => {
+    const dateString = format(date, 'yyyy-MM-dd');
+    const dailyDocRef = doc(db, userDailyLogsCollectionPath, dateString);
+
+    // Optimistically update UI
+    setAllDailyLogsForYear(prevLogs => {
+      const logIndex = prevLogs.findIndex(log => log.date === dateString);
+      const newStatus = !currentStatus;
+      if (logIndex > -1) {
+        const updatedLogs = [...prevLogs];
+        const newHabits = { ...updatedLogs[logIndex].habits, [habitName]: newStatus };
+        updatedLogs[logIndex] = { ...updatedLogs[logIndex], habits: newHabits };
+        return updatedLogs;
+      } else {
+        // If no log exists for this day, create one
+        const newLog: DailyLogData = { date: dateString, habits: { [habitName]: newStatus } };
+        // Initialize other defined habits for this new log entry if they are not present
+        definedHabits.forEach(h => {
+          if (!(h.name in newLog.habits)) {
+            newLog.habits[h.name] = false; // Default to false if not the one being toggled
+          }
+        });
+        return [...prevLogs, newLog].sort((a, b) => a.date.localeCompare(b.date));
+      }
+    });
+
+    try {
+      const docSnap = await getDoc(dailyDocRef);
+      let newHabitsData: Record<string, boolean> = {};
+
+      if (docSnap.exists()) {
+        newHabitsData = { ...docSnap.data().habits };
+      } else {
+        // If the document doesn't exist, initialize with all defined habits as false
+        definedHabits.forEach(h => {
+          newHabitsData[h.name] = false;
+        });
+      }
+      newHabitsData[habitName] = !currentStatus; // Toggle the specific habit
+
+      await setDoc(dailyDocRef, { date: dateString, habits: newHabitsData }, { merge: true });
+
+      toast({
+        title: 'Habit Updated',
+        description: `"${habitName}" for ${dateString} marked as ${!currentStatus ? 'complete' : 'incomplete'}.`,
+      });
+    } catch (error) {
+      console.error('Error updating past habit status:', error);
+      toast({
+        title: 'Update Error',
+        description: 'Could not update habit status. Reverting change.',
+        variant: 'destructive',
+      });
+      // Revert optimistic update by re-fetching
+      await fetchAllYearlyLogs();
+    }
+  };
+
 
   return (
     <div className="container mx-auto max-w-4xl p-4 md:p-8"> 
@@ -122,15 +178,13 @@ function HabitsPageContent() {
       </Card>
 
       <div className="mb-8">
-        <h2 className="text-2xl font-semibold mb-1 text-foreground flex items-center">
+        <h2 className="text-2xl font-semibold mb-2 text-foreground flex items-center">
             <CalendarSearch className="mr-3 h-7 w-7 text-primary"/>
             Habit Activity Heatmaps - {currentYear}
         </h2>
-        <p className="text-muted-foreground mb-6">Visualize your consistency for each habit over the year. Heatmaps are for display only.</p>
-         <div className="flex items-start space-x-2 text-xs text-muted-foreground p-3 bg-muted/50 rounded-md mb-4">
-            <Info className="h-4 w-4 mt-0.5 flex-shrink-0 text-accent" />
-            <p>Clicking on heatmap squares to modify past data is not yet supported. Use the list above to track today's habits.</p>
-        </div>
+        <p className="text-muted-foreground mb-6 text-sm">
+            Click on a square in the heatmaps below to toggle habit completion for past dates.
+        </p>
       </div>
 
       {isLoadingHabits || isLoadingLogs ? (
@@ -155,7 +209,8 @@ function HabitsPageContent() {
               habit={habit}
               allDailyLogsForYear={allDailyLogsForYear}
               currentYear={currentYear}
-              isLoadingLogs={isLoadingLogs} 
+              isLoadingLogs={isLoadingLogs}
+              onTogglePastHabit={handleTogglePastHabit}
             />
           ))}
         </div>
@@ -181,3 +236,5 @@ export default function HabitsPage() {
     </ProtectedRoute>
   );
 }
+
+    

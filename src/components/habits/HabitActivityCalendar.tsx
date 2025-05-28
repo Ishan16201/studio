@@ -1,32 +1,37 @@
 
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
-import { db, USER_ID } from '@/lib/firebase';
-import { collection, getDocs, query, where, orderBy, onSnapshot } from 'firebase/firestore';
-import { format, subMonths, startOfYear, endOfYear, eachDayOfInterval, startOfMonth, endOfMonth, getMonth, getYear, isSameDay } from 'date-fns';
+import React, { useMemo } from 'react';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
-import { CalendarSearch, Activity } from 'lucide-react';
-import type { Habit } from '@/types'; // Import Habit type
+import { Activity } from 'lucide-react';
+import type { Habit } from '@/types';
+import { cn } from '@/lib/utils';
 
-interface DailyLogData { // Represents the Firestore document for a day
-  date: string; // YYYY-MM-DD
-  habits: Record<string, boolean>; // { "habitName1": true, "habitName2": false }
+interface DailyLogData {
+  date: string; 
+  habits: Record<string, boolean>;
 }
 
 const getIntensityColorForHabit = (isCompleted: boolean | undefined): string => {
-  if (isCompleted === undefined) return 'bg-muted/20 hover:bg-muted/40'; // Habit not tracked for this day or data missing
-  return isCompleted ? 'bg-green-600 hover:bg-green-500' : 'bg-muted/40 hover:bg-muted/60'; // Completed or explicitly not completed
+  if (isCompleted === undefined) return 'bg-muted/20 hover:bg-muted/40 focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2'; // Not tracked or data missing
+  return isCompleted ? 'bg-green-600 hover:bg-green-500 focus-visible:ring-green-400 focus-visible:ring-2 focus-visible:ring-offset-2' : 'bg-red-600/40 hover:bg-red-500/50 focus-visible:ring-red-400 focus-visible:ring-2 focus-visible:ring-offset-2'; // Completed or explicitly not completed
 };
 
-const MonthGrid: React.FC<{ month: Date; dailyLogs: DailyLogData[]; habitName: string }> = ({ month, dailyLogs, habitName }) => {
+interface MonthGridProps {
+  month: Date;
+  dailyLogs: DailyLogData[];
+  habitName: string;
+  onTogglePastHabit: (date: Date, habitName: string, currentStatus: boolean) => Promise<void>;
+}
+
+const MonthGrid: React.FC<MonthGridProps> = ({ month, dailyLogs, habitName, onTogglePastHabit }) => {
   const monthStart = startOfMonth(month);
   const monthEnd = endOfMonth(month);
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
-  const firstDayOfMonth = monthStart.getDay(); // 0 for Sunday, 1 for Monday, etc.
-
+  const firstDayOfMonth = monthStart.getDay(); 
   const monthName = format(month, 'MMM');
 
   return (
@@ -37,16 +42,21 @@ const MonthGrid: React.FC<{ month: Date; dailyLogs: DailyLogData[]; habitName: s
           <div key={`blank-${i}`} className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
         ))}
         {daysInMonth.map((day) => {
-          const dayLog = dailyLogs.find(d => isSameDay(new Date(d.date), day));
-          const isCompleted = dayLog?.habits?.[habitName]; // Check if specific habit was completed
+          const dayLog = dailyLogs.find(d => d.date === format(day, 'yyyy-MM-dd'));
+          const isCompleted = dayLog?.habits?.[habitName];
           const colorClass = getIntensityColorForHabit(isCompleted);
           
           return (
             <TooltipProvider key={day.toISOString()} delayDuration={100}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div
-                    className={`w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-sm cursor-default ${colorClass} transition-colors`}
+                  <button
+                    onClick={() => onTogglePastHabit(day, habitName, isCompleted || false)}
+                    aria-label={`Toggle ${habitName} for ${format(day, 'MMMM d, yyyy')}. Status: ${isCompleted ? 'Completed' : isCompleted === false ? 'Not Completed' : 'Not Tracked'}`}
+                    className={cn(
+                      "w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-sm transition-all duration-150 ease-in-out focus:outline-none",
+                      colorClass
+                    )}
                   />
                 </TooltipTrigger>
                 <TooltipContent className="text-xs p-2">
@@ -56,6 +66,7 @@ const MonthGrid: React.FC<{ month: Date; dailyLogs: DailyLogData[]; habitName: s
                      isCompleted === false ? `${habitName}: Not Completed` : 
                      `${habitName}: Not tracked`}
                   </p>
+                  <p className="text-muted-foreground/80 italic">Click to toggle</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -68,13 +79,14 @@ const MonthGrid: React.FC<{ month: Date; dailyLogs: DailyLogData[]; habitName: s
 
 interface HabitActivityCalendarProps {
   habit: Habit;
-  allDailyLogsForYear: DailyLogData[]; // Pass all logs for the year to avoid re-fetching per habit
+  allDailyLogsForYear: DailyLogData[];
   currentYear: number;
   isLoadingLogs: boolean;
+  onTogglePastHabit: (date: Date, habitName: string, currentStatus: boolean) => Promise<void>;
 }
 
-export default function HabitActivityCalendar({ habit, allDailyLogsForYear, currentYear, isLoadingLogs }: HabitActivityCalendarProps) {
-  if (isLoadingLogs && !allDailyLogsForYear.length) { // Show skeleton if loading initial logs
+export default function HabitActivityCalendar({ habit, allDailyLogsForYear, currentYear, isLoadingLogs, onTogglePastHabit }: HabitActivityCalendarProps) {
+  if (isLoadingLogs && !allDailyLogsForYear.length) {
     return (
       <Card className="shadow-lg rounded-xl">
         <CardHeader>
@@ -93,8 +105,6 @@ export default function HabitActivityCalendar({ habit, allDailyLogsForYear, curr
 
   const monthsToDisplay = Array.from({ length: 12 }, (_, i) => new Date(currentYear, i, 1));
 
-  // Filter logs relevant to this specific habit's display (though rendering logic will use habit.name)
-  // This isn't strictly necessary if MonthGrid handles the habitName lookup, but can be useful.
   const relevantLogsForHabit = useMemo(() => {
       return allDailyLogsForYear.filter(log => log.habits && habit.name in log.habits);
   }, [allDailyLogsForYear, habit.name]);
@@ -115,8 +125,9 @@ export default function HabitActivityCalendar({ habit, allDailyLogsForYear, curr
             <MonthGrid 
                 key={format(month, 'yyyy-MM')} 
                 month={month} 
-                dailyLogs={allDailyLogsForYear.filter(d => format(new Date(d.date), 'yyyy-MM') === format(month, 'yyyy-MM'))}
+                dailyLogs={allDailyLogsForYear.filter(d => format(parseISO(d.date), 'yyyy-MM') === format(month, 'yyyy-MM'))}
                 habitName={habit.name}
+                onTogglePastHabit={onTogglePastHabit}
             />
           ))}
         </div>
