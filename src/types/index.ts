@@ -4,7 +4,7 @@ import type { Timestamp } from 'firebase/firestore';
 export interface Habit {
   id: string; // Firestore document ID for the habit definition
   name: string;
-  completed: boolean; // Used for display in list, reflects daily status
+  // completed: boolean; // This was for the old PREDEFINED_HABITS, not directly used for Firestore habit definitions
   createdAt?: Timestamp; // When the habit definition was created
   userId?: string;
 }
