@@ -1,14 +1,18 @@
+
+'use client'; // Required for ProtectedRoute
+
 import HabitListComponent from '@/components/habits/HabitList';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { ListChecks } from 'lucide-react';
 import { format } from 'date-fns';
+import ProtectedRoute from '@/components/auth/ProtectedRoute'; // Import ProtectedRoute
 
-export const metadata = {
-  title: 'Habit Tracker - Grindset',
-  description: 'Build good habits and track your daily progress.',
-};
+// export const metadata = { // Metadata should be static for server components
+// title: 'Habit Tracker - Grindset',
+// description: 'Build good habits and track your daily progress.',
+// };
 
-export default function HabitsPage() {
+function HabitsPageContent() {
   const today = format(new Date(), "eeee, MMMM do"); 
 
   return (
@@ -31,5 +35,13 @@ export default function HabitsPage() {
         Consistency is key. Track your progress daily.
       </p>
     </div>
+  );
+}
+
+export default function HabitsPage() {
+  return (
+    <ProtectedRoute>
+      <HabitsPageContent />
+    </ProtectedRoute>
   );
 }

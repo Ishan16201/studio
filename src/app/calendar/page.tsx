@@ -1,20 +1,26 @@
-'use client'; // Required for useState
+
+'use client';
 
 import { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { CalendarDays, Info } from 'lucide-react';
-import { Calendar } from '@/components/ui/calendar'; // ShadCN Calendar
+import { CalendarDays, Info, PlusCircle } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import type { DateRange } from 'react-day-picker';
 
-// export const metadata = { // Metadata should be in a server component or layout
-//   title: 'Calendar - Grindset',
-//   description: 'View your schedule and plan your events.',
-// };
 
 export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  // const [selectedRange, setSelectedRange] = useState<DateRange | undefined>(); // For range selection
+  const { toast } = useToast();
+
+  const handleAddEvent = () => {
+    toast({
+      title: "Add Event Clicked",
+      description: "Event creation functionality is not yet implemented.",
+    });
+  };
 
   return (
     <div className="container mx-auto max-w-2xl p-4 md:p-8">
@@ -29,6 +35,9 @@ export default function CalendarPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 md:p-6 flex flex-col items-center">
+          <Button onClick={handleAddEvent} className="mb-6 w-full sm:w-auto">
+            <PlusCircle className="mr-2 h-4 w-4" /> New Event
+          </Button>
           <Calendar
             mode="single"
             selected={selectedDate}
@@ -45,7 +54,7 @@ export default function CalendarPage() {
         <CardFooter className="p-4 md:p-6 border-t">
             <div className="flex items-start space-x-2 text-xs text-muted-foreground">
                 <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                <p>This is a basic calendar view. Full event management features are planned for future updates.</p>
+                <p>This is a basic calendar view. Click 'New Event' to (eventually) add events. Full event management features are planned for future updates.</p>
             </div>
         </CardFooter>
       </Card>

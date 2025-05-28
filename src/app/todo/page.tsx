@@ -1,13 +1,17 @@
+
+'use client'; // Required for ProtectedRoute
+
 import TodoListComponent from '@/components/todo/TodoListComponent';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { CheckSquare } from 'lucide-react';
+import ProtectedRoute from '@/components/auth/ProtectedRoute'; // Import ProtectedRoute
 
-export const metadata = {
-  title: 'To-Do List - Grindset',
-  description: 'Manage your daily tasks and stay organized.',
-};
+// export const metadata = { // Metadata should be static for server components
+// title: 'To-Do List - Grindset',
+// description: 'Manage your daily tasks and stay organized.',
+// };
 
-export default function TodoPage() {
+function TodoPageContent() {
   return (
     <div className="container mx-auto max-w-2xl p-4 md:p-8">
       <Card className="shadow-xl rounded-xl bg-card">
@@ -21,10 +25,9 @@ export default function TodoPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 md:p-6">
-          {/* TodoListComponent will fetch its own data from Firebase */}
           <TodoListComponent 
             showTitle={false} 
-            maxHeight="max-h-[calc(100vh-280px)] sm:max-h-[calc(100vh-320px)]" // Adjusted for better mobile view
+            maxHeight="max-h-[calc(100vh-280px)] sm:max-h-[calc(100vh-320px)]"
             enableAdding={true} 
           />
         </CardContent>
@@ -33,5 +36,13 @@ export default function TodoPage() {
         Organize your day, one task at a time.
       </p>
     </div>
+  );
+}
+
+export default function TodoPage() {
+  return (
+    <ProtectedRoute>
+      <TodoPageContent />
+    </ProtectedRoute>
   );
 }

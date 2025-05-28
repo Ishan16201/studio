@@ -1,31 +1,35 @@
+
+'use client'; // Required for ProtectedRoute
+
 import AudioPlayerComponent from '@/components/meditation/AudioPlayer';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Headphones, Waves } from 'lucide-react';
 import Image from 'next/image';
+import ProtectedRoute from '@/components/auth/ProtectedRoute'; // Import ProtectedRoute
 
-export const metadata = {
-  title: 'Guided Meditation - Grindset',
-  description: 'Find calm and clarity with guided meditation tracks.',
-};
+// export const metadata = { // Metadata should be static for server components
+// title: 'Guided Meditation - Grindset',
+// description: 'Find calm and clarity with guided meditation tracks.',
+// };
 
-export default function MeditationPage() {
+function MeditationPageContent() {
   const meditationTracks = [
     {
       id: '1',
-      title: '5-Min Mindful Breathing', // Shorter title for mobile
+      title: '5-Min Mindful Breathing',
       description: 'A short practice to center yourself and find calm.',
       duration: '5 min',
       audioSrc: '/sounds/sample_meditation_5min.mp3',
-      coverArt: 'https://placehold.co/400x400.png?text=Mindful+Breathing',
+      coverArt: 'https://placehold.co/400x400.png',
       aiHint: 'calm nature'
     },
     {
       id: '2',
-      title: '10-Min Body Scan', // Shorter title
+      title: '10-Min Body Scan',
       description: 'Release tension and connect with your body.',
       duration: '10 min',
       audioSrc: '/sounds/sample_meditation_10min.mp3',
-      coverArt: 'https://placehold.co/400x400.png?text=Body+Scan',
+      coverArt: 'https://placehold.co/400x400.png',
       aiHint: 'serene landscape'
     },
   ];
@@ -47,7 +51,7 @@ export default function MeditationPage() {
           <Card key={track.id} className="shadow-xl rounded-xl overflow-hidden">
             <div className="sm:flex">
               <div className="sm:flex-shrink-0">
-                <div className="relative h-40 sm:h-48 w-full sm:w-40 md:w-48"> {/* Adjusted image sizes */}
+                <div className="relative h-40 sm:h-48 w-full sm:w-40 md:w-48">
                   <Image 
                     src={track.coverArt} 
                     alt={track.title} 
@@ -75,5 +79,13 @@ export default function MeditationPage() {
         Take a few moments for yourself. You deserve it.
       </p>
     </div>
+  );
+}
+
+export default function MeditationPage() {
+  return (
+    <ProtectedRoute>
+      <MeditationPageContent />
+    </ProtectedRoute>
   );
 }

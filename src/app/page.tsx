@@ -1,4 +1,6 @@
 
+'use client'; // Required for ProtectedRoute
+
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,6 +9,7 @@ import Image from 'next/image';
 import { format } from 'date-fns';
 import TodoListComponent from '@/components/todo/TodoListComponent';
 import { cn } from '@/lib/utils';
+import ProtectedRoute from '@/components/auth/ProtectedRoute'; // Import ProtectedRoute
 
 interface DashboardWidgetProps {
   title: string;
@@ -28,7 +31,7 @@ function DashboardWidget({ title, description, href, icon: Icon, children, class
         </div>
         {description && <CardDescription className="text-xs text-muted-foreground">{description}</CardDescription>}
       </CardHeader>
-      <CardContent className="flex-grow flex flex-col justify-between p-4 sm:p-6"> {/* Adjusted padding */}
+      <CardContent className="flex-grow flex flex-col justify-between p-4 sm:p-6">
         {children}
         {href && (
           <Button asChild variant="outline" size="sm" className="mt-auto w-full group border-primary/50 hover:bg-primary/10">
@@ -46,7 +49,7 @@ function DashboardWidget({ title, description, href, icon: Icon, children, class
 }
 
 
-export default function HomePage() {
+function HomePageContent() {
   const today = new Date();
   const formattedDate = format(today, "eeee, MMMM do");
   
@@ -99,7 +102,7 @@ export default function HomePage() {
           title="Journal"
           description="Reflect and record your thoughts."
           href="/journal"
-          icon={BookOpenText} // Or PlusCircle if preferred, BookOpenText is also good.
+          icon={BookOpenText}
           borderColor="border-purple-500"
           className="lg:col-span-1 md:col-span-2 lg:col-start-2 min-h-[150px] md:min-h-full"
         >
@@ -149,3 +152,10 @@ export default function HomePage() {
   );
 }
 
+export default function HomePage() {
+  return (
+    <ProtectedRoute>
+      <HomePageContent />
+    </ProtectedRoute>
+  );
+}

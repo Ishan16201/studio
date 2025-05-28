@@ -1,13 +1,17 @@
+
+'use client'; // Required for ProtectedRoute
+
 import PomodoroTimerComponent from '@/components/pomodoro/PomodoroTimer';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Timer } from 'lucide-react';
+import ProtectedRoute from '@/components/auth/ProtectedRoute'; // Import ProtectedRoute
 
-export const metadata = {
-  title: 'Pomodoro Timer - Grindset',
-  description: 'Boost your focus with the Pomodoro technique.',
-};
+// export const metadata = { // Metadata should be static for server components
+// title: 'Pomodoro Timer - Grindset',
+// description: 'Boost your focus with the Pomodoro technique.',
+// };
 
-export default function PomodoroPage() {
+function PomodoroPageContent() {
   return (
     <div className="container mx-auto max-w-md p-4 md:p-8 flex flex-col items-center justify-center min-h-[calc(100vh-100px)] sm:min-h-[calc(100vh-120px)]">
       <Card className="w-full shadow-xl rounded-xl">
@@ -28,5 +32,13 @@ export default function PomodoroPage() {
         Work for 25 minutes, then take a 5-minute break. Repeat.
       </p>
     </div>
+  );
+}
+
+export default function PomodoroPage() {
+  return (
+    <ProtectedRoute>
+      <PomodoroPageContent />
+    </ProtectedRoute>
   );
 }

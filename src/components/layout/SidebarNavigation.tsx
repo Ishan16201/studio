@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation'; // Import useRouter
+import { usePathname, useRouter } from 'next/navigation';
 import {
   SidebarContent,
   SidebarHeader,
@@ -12,8 +12,9 @@ import {
   SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { Home, BookOpenText, Timer, ListChecks, Headphones, CheckSquare, CalendarDays, Settings, LogOut, PlusCircle } from 'lucide-react';
+import { Home, BookOpenText, Timer, ListChecks, Headphones, CheckSquare, CalendarDays, Settings, LogOut, PlusCircle, Menu as MenuIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: Home },
@@ -25,7 +26,6 @@ const navItems = [
   { href: '/journal', label: 'Journal', icon: PlusCircle },
 ];
 
-// Custom SVG Logo component
 const CustomLogo = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -52,8 +52,9 @@ const CustomLogo = (props: React.SVGProps<SVGSVGElement>) => (
 
 export default function SidebarNavigation() {
   const pathname = usePathname();
-  const router = useRouter(); // Initialize router
   const { isMobile, setOpenMobile } = useSidebar();
+  const { logout } = useAuth(); // Get logout function
+  const router = useRouter();
 
   const handleLinkClick = () => {
     if (isMobile) {
@@ -61,11 +62,9 @@ export default function SidebarNavigation() {
     }
   };
 
-  const handleLogout = () => {
-    // Placeholder for actual Firebase logout logic
-    console.log("Logout clicked");
+  const handleLogout = async () => {
     if (isMobile) setOpenMobile(false);
-    router.push('/login'); // Redirect to login page
+    await logout(); // AuthContext logout now handles redirect
   };
 
   return (
@@ -74,7 +73,7 @@ export default function SidebarNavigation() {
         <SidebarHeader className="p-2 mb-4">
           <Link href="/" className="flex items-center gap-2" onClick={handleLinkClick}>
             <CustomLogo className="w-8 h-8 text-primary" />
-            {/* Grindset title removed from sidebar */}
+            {/* Grindset title removed */}
           </Link>
         </SidebarHeader>
 
@@ -131,7 +130,7 @@ export default function SidebarNavigation() {
                <SidebarMenuButton 
                   className="w-full justify-start text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   tooltip="Log Out"
-                  onClick={handleLogout} // Use new logout handler
+                  onClick={handleLogout}
                 >
                 <LogOut className="h-5 w-5 mr-3 group-data-[collapsible=icon]:mr-0" />
                 <span className="group-data-[collapsible=icon]:hidden">Log Out</span>
@@ -143,4 +142,3 @@ export default function SidebarNavigation() {
     </SidebarContent>
   );
 }
-

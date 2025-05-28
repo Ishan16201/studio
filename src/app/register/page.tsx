@@ -10,10 +10,13 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { UserPlus } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast'; // Import useToast
+import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
+import { useRouter } from 'next/navigation'; // Import useRouter
 
 const registerSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  phone: z.string().optional(), // Simple string validation for now
+  phone: z.string().optional(),
   email: z.string().email({ message: "Please enter a valid email address." }),
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
 });
@@ -21,6 +24,10 @@ const registerSchema = z.object({
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
+  const { toast } = useToast();
+  const { login, isLoading } = useAuth(); // Using login to simulate for now
+  const router = useRouter();
+
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
@@ -31,10 +38,27 @@ export default function RegisterPage() {
     },
   });
 
-  // Basic handler, full auth logic would be more complex
-  const onSubmit = (data: RegisterFormValues) => {
-    // TODO: Implement Firebase registration logic
+  const onSubmit = async (data: RegisterFormValues) => {
+    // TODO: Implement Firebase registration logic here (e.g., createUserWithEmailAndPassword)
+    // For now, we'll simulate registration and then login
     console.log("Registration data:", data);
+    toast({
+      title: "Registration Attempted (Simulated)",
+      description: "Account creation simulated. Logging you in...",
+    });
+    try {
+      // In a real app, after successful Firebase registration, you'd often sign the user in.
+      // Here, we directly call the login simulation from AuthContext.
+      await login(data.email, data.password); 
+      // router.push('/'); // Redirect to dashboard is handled by login() in AuthContext
+    } catch (error) {
+      console.error("Simulated registration/login failed:", error);
+      toast({
+        title: "Registration/Login Failed",
+        description: "Could not process your registration. Please try again. (Simulated)",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -59,7 +83,7 @@ export default function RegisterPage() {
                   <FormItem>
                     <FormLabel>Full Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="John Doe" {...field} />
+                      <Input placeholder="John Doe" {...field} disabled={isLoading} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -72,7 +96,7 @@ export default function RegisterPage() {
                   <FormItem>
                     <FormLabel>Email Address</FormLabel>
                     <FormControl>
-                      <Input type="email" placeholder="you@example.com" {...field} />
+                      <Input type="email" placeholder="you@example.com" {...field} disabled={isLoading} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -85,7 +109,7 @@ export default function RegisterPage() {
                   <FormItem>
                     <FormLabel>Phone Number (Optional)</FormLabel>
                     <FormControl>
-                      <Input type="tel" placeholder="(123) 456-7890" {...field} />
+                      <Input type="tel" placeholder="(123) 456-7890" {...field} disabled={isLoading} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -98,14 +122,14 @@ export default function RegisterPage() {
                   <FormItem>
                     <FormLabel>Password</FormLabel>
                     <FormControl>
-                      <Input type="password" placeholder="••••••••" {...field} />
+                      <Input type="password" placeholder="••••••••" {...field} disabled={isLoading} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full !mt-8" size="lg">
-                Sign Up
+              <Button type="submit" className="w-full !mt-8" size="lg" disabled={isLoading}>
+                {isLoading ? 'Signing Up...' : 'Sign Up'}
               </Button>
             </form>
           </Form>

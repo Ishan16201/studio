@@ -2,14 +2,16 @@
 import type { Timestamp } from 'firebase/firestore';
 
 export interface Habit {
-  id: string;
+  id: string; // Firestore document ID for the habit definition
   name: string;
-  completed: boolean;
+  completed: boolean; // Used for display in list, reflects daily status
+  createdAt?: Timestamp; // When the habit definition was created
+  userId?: string;
 }
 
 export interface DailyHabits {
   date: string; // YYYY-MM-DD
-  habits: Record<string, boolean>; // e.g., { "Wake up early": true, "Exercise": false }
+  habits: Record<string, boolean>; // e.g., { "Wake up early": true, "Exercise": false } - key is habit NAME
 }
 
 export interface JournalEntry {

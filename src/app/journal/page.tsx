@@ -3,16 +3,10 @@
 
 import JournalEditor from '@/components/journal/JournalEditor';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { PlusCircle, CalendarClock } from 'lucide-react'; // Changed BookOpenText to PlusCircle, added CalendarClock
-import { useJournalEntry } from '@/hooks/useJournalEntry'; // Import the hook
+import { PlusCircle, CalendarClock } from 'lucide-react';
+import { useJournalEntry } from '@/hooks/useJournalEntry';
 import { format } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
-
-// Metadata should be in a server component or layout if static
-// export const metadata = {
-// title: 'Journal - Grindset',
-// description: 'Record your thoughts and track your progress.',
-// };
 
 export default function JournalPage() {
   const { entry, isLoading, error } = useJournalEntry();
@@ -20,11 +14,11 @@ export default function JournalPage() {
   const getLastUpdatedText = () => {
     if (isLoading) return 'Loading date...';
     if (error) return 'Error loading date';
-    if (entry?.lastUpdated) {
+    if (entry && entry.lastUpdated) { // Ensure entry and entry.lastUpdated are truthy
       const date = entry.lastUpdated instanceof Date ? entry.lastUpdated : entry.lastUpdated.toDate();
       return `Last entry: ${format(date, 'MMMM do, yyyy HH:mm')}`;
     }
-    return 'No entries yet.';
+    return 'No entries yet. Start writing!';
   };
 
   return (
@@ -42,11 +36,17 @@ export default function JournalPage() {
           </div>
           <div className="mt-3 text-xs text-primary-foreground/70 flex items-center">
             <CalendarClock className="w-3.5 h-3.5 mr-1.5" />
-            {isLoading ? <Skeleton className="h-4 w-32" /> : <span>{getLastUpdatedText()}</span>}
+            {isLoading && !entry ? <Skeleton className="h-4 w-32" /> : <span>{getLastUpdatedText()}</span>}
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <JournalEditor />
+          {isLoading && !entry ? (
+             <div className="p-4 sm:p-6 h-[calc(100vh-200px)] sm:h-[calc(100vh-250px)] md:h-[500px]">
+               <Skeleton className="h-full w-full rounded-md" />
+             </div>
+          ) : (
+            <JournalEditor />
+          )}
         </CardContent>
       </Card>
        <p className="text-center text-sm text-muted-foreground mt-6">
