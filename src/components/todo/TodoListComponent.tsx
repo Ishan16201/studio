@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PlusCircle, Trash2, AlertTriangle } from 'lucide-react';
 import type { TodoItem } from '@/types';
-import { db, USER_ID, firebaseInitialized, firebaseInitError as fbInitError } from '@/lib/firebase'; // Assuming USER_ID is exported for simplicity
+import { db, USER_ID, firebaseInitialized, firebaseInitError as fbConfigError } from '@/lib/firebase';
 import {
   collection,
   query,
@@ -39,23 +39,18 @@ export default function TodoListComponent({
   const [tasks, setTasks] = useState<TodoItem[]>([]);
   const [newTaskText, setNewTaskText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [operationalError, setOperationalError] = useState<string | null>(null); // For errors after init
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!firebaseInitialized) {
-      setError(fbInitError || "Firebase is not initialized. Please check configuration.");
+    if (!firebaseInitialized || !db) {
+      // Error is handled by the main return block, no need to set operationalError here for config issues
       setIsLoading(false);
       return;
     }
-    if (!db) {
-        setError("Firestore database instance is not available.");
-        setIsLoading(false);
-        return;
-    }
 
     setIsLoading(true);
-    setError(null);
+    setOperationalError(null); // Clear previous operational errors
     const tasksCol = collection(db, 'todos');
     const q = query(
       tasksCol,
@@ -75,7 +70,7 @@ export default function TodoListComponent({
       },
       (err) => {
         console.error('Error fetching tasks:', err);
-        setError('Failed to load tasks. Please try again.');
+        setOperationalError('Failed to load tasks. Please try again.');
         toast({
           title: 'Error',
           description: 'Could not load tasks.',
@@ -86,7 +81,7 @@ export default function TodoListComponent({
     );
 
     return () => unsubscribe();
-  }, [toast]);
+  }, [toast, firebaseInitialized, db]); // Added firebaseInitialized and db
 
   const addTask = async () => {
     if (!firebaseInitialized || !db) {
@@ -102,7 +97,6 @@ export default function TodoListComponent({
         userId: USER_ID,
       });
       setNewTaskText('');
-      // toast({ title: 'Task Added', description: `"${newTaskText}" was added.` });
     } catch (err) {
       console.error('Error adding task:', err);
       toast({
@@ -161,7 +155,7 @@ export default function TodoListComponent({
       <div className="w-full p-4 text-center text-destructive-foreground bg-destructive/80 rounded-md">
         <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
         <p className="font-semibold">Configuration Error</p>
-        <p className="text-sm">{fbInitError || "Firebase is not configured. Please check console and setup."}</p>
+        <p className="text-sm">{fbConfigError || "Firebase is not configured. Please check console and setup."}</p>
       </div>
     );
   }
@@ -183,12 +177,12 @@ export default function TodoListComponent({
     );
   }
 
-  if (error && error !== fbInitError) { // Don't show double error if fbInitError is the cause
+  if (operationalError) { 
     return (
       <div className="w-full p-4 text-center text-destructive-foreground bg-destructive/80 rounded-md">
         <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
         <p className="font-semibold">Error Loading Tasks</p>
-        <p className="text-sm">{error}</p>
+        <p className="text-sm">{operationalError}</p>
       </div>
     );
   }

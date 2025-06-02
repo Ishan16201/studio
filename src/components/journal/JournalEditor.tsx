@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Textarea } from '@/components/ui/textarea';
-import { db, USER_ID, firebaseInitialized, firebaseInitError as fbInitError } from '@/lib/firebase';
+import { db, USER_ID, firebaseInitialized, firebaseInitError as fbConfigError } from '@/lib/firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { useAutosave } from '@/hooks/useAutosave';
 import { useToast } from '@/hooks/use-toast';
@@ -14,7 +14,8 @@ import { AlertTriangle } from 'lucide-react';
 const JOURNAL_DOC_PATH = `journal/${USER_ID}/entry/main`;
 
 export default function JournalEditor() {
-  const { entry: initialEntry, isLoading: isLoadingEntry, error: entryError, refetch } = useJournalEntry();
+  // useJournalEntry's error will include fbConfigError if Firebase isn't initialized
+  const { entry: initialEntry, isLoading: isLoadingEntry, error: entryLoadingError, refetch } = useJournalEntry();
   const [content, setContent] = useState<string>('');
   const [isDirty, setIsDirty] = useState<boolean>(false);
   const { toast } = useToast();
@@ -47,7 +48,7 @@ export default function JournalEditor() {
         variant: 'destructive',
       });
     }
-  }, [toast, refetch]);
+  }, [toast, refetch, firebaseInitialized, db]); // Added firebaseInitialized, db
 
   useAutosave<string>({
     data: content,
@@ -61,28 +62,24 @@ export default function JournalEditor() {
     setIsDirty(true);
   };
 
-  if (!firebaseInitialized) {
+  // Prioritize showing Firebase config error if it exists (from useJournalEntry or direct check)
+  const configError = !firebaseInitialized ? (fbConfigError || "Firebase configuration error.") : null;
+  const displayError = configError || entryLoadingError;
+
+  if (displayError) {
     return (
-      <div className="p-4 sm:p-6 text-center text-destructive-foreground bg-destructive/80 rounded-md h-[calc(100vh-200px)] sm:h-[calc(100vh-250px)] md:h-[500px] flex flex-col justify-center items-center">
+      <div className="p-4 sm:p-6 text-center text-destructive-foreground bg-destructive/80 rounded-b-xl h-[calc(100vh-200px)] sm:h-[calc(100vh-250px)] md:h-[500px] flex flex-col justify-center items-center">
         <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
-        <p className="font-semibold">Configuration Error</p>
-        <p className="text-sm">{fbInitError || "Firebase is not configured. Please check console and setup."}</p>
+        <p className="font-semibold">Error</p>
+        <p className="text-sm">{displayError}</p>
       </div>
     );
   }
-
-  if (isLoadingEntry) {
+  
+  if (isLoadingEntry && !initialEntry) { // Show skeleton only if loading and no initial entry yet
     return (
       <div className="p-4 sm:p-6 h-[calc(100vh-200px)] sm:h-[calc(100vh-250px)] md:h-[500px]">
         <Skeleton className="h-full w-full rounded-md" />
-      </div>
-    );
-  }
-
-  if (entryError && entryError !== fbInitError) {
-    return (
-      <div className="p-4 sm:p-6 text-destructive text-center">
-        <p>Error loading journal: {entryError}</p>
       </div>
     );
   }
@@ -94,6 +91,7 @@ export default function JournalEditor() {
       placeholder="What's on your mind? Your progress, your struggles, your wins... Type it all out."
       className="w-full h-[calc(100vh-250px)] sm:h-[calc(100vh-300px)] md:h-[calc(100vh-220px)] p-4 sm:p-6 text-sm sm:text-base md:text-lg border-0 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none rounded-b-xl bg-card text-card-foreground"
       aria-label="Journal Entry"
+      disabled={!firebaseInitialized || isLoadingEntry} // Disable if not initialized or still loading
     />
   );
 }

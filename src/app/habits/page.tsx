@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import HabitListComponent from '@/components/habits/HabitList';
 import HabitActivityCalendar from '@/components/habits/HabitActivityCalendar';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -9,7 +9,7 @@ import { ListChecks, CalendarSearch, AlertTriangle } from 'lucide-react';
 import { format, startOfYear, endOfYear, parseISO } from 'date-fns';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import type { Habit } from '@/types';
-import { db, USER_ID, firebaseInitialized, firebaseInitError as fbInitError } from '@/lib/firebase';
+import { db, USER_ID, firebaseInitialized, firebaseInitError as fbConfigError } from '@/lib/firebase';
 import { collection, query, orderBy, onSnapshot, getDocs, where, doc, setDoc, getDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -31,31 +31,24 @@ function HabitsPageContent() {
   const [allDailyLogsForYear, setAllDailyLogsForYear] = useState<DailyLogData[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(true);
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-  const [initError, setInitError] = useState<string | null>(null);
+  // const [initError, setInitError] = useState<string | null>(null); // Use fbConfigError directly
   const { toast } = useToast();
 
+  // This effect is primarily to set loading states based on Firebase init.
+  // The actual error display for fbConfigError will be handled by the main return.
   useEffect(() => {
     if (!firebaseInitialized) {
-      setInitError(fbInitError || "Firebase is not initialized. Cannot load habits functionality.");
       setIsLoadingHabits(false);
       setIsLoadingLogs(false);
-      return;
     }
-    if (!db) {
-      setInitError("Firestore database instance is not available. Cannot load habits functionality.");
-      setIsLoadingHabits(false);
-      setIsLoadingLogs(false);
-      return;
-    }
-    setInitError(null); // Clear init error if Firebase is good
-  }, []);
+  }, [firebaseInitialized]);
 
 
   // Fetch defined habits
   useEffect(() => {
-    if (!firebaseInitialized || !db || initError) {
-      setIsLoadingHabits(false); // Don't attempt fetch if Firebase isn't ready or errored
-      return;
+    if (!firebaseInitialized || !db) {
+      setIsLoadingHabits(false); 
+      return; // Config error handled by main return
     }
     setIsLoadingHabits(true);
     const habitsColRef = collection(db, userHabitsCollectionPath);
@@ -84,12 +77,12 @@ function HabitsPageContent() {
       }
     );
     return () => unsubscribe();
-  }, [toast, firebaseInitialized, db, initError]);
+  }, [toast, firebaseInitialized, db]); // Added firebaseInitialized, db
 
-  const fetchAllYearlyLogs = async () => {
-      if (!firebaseInitialized || !db || initError) {
+  const fetchAllYearlyLogs = useCallback(async () => {
+      if (!firebaseInitialized || !db) {
         setIsLoadingLogs(false);
-        return;
+        return; // Config error handled by main return
       }
       setIsLoadingLogs(true);
       try {
@@ -118,16 +111,15 @@ function HabitsPageContent() {
       } finally {
         setIsLoadingLogs(false);
       }
-    };
+    }, [currentYear, toast, firebaseInitialized, db]); // Added firebaseInitialized, db
 
   useEffect(() => {
-    if (firebaseInitialized && db && !initError) {
+    if (firebaseInitialized && db) { // Only fetch if Firebase is ready
      fetchAllYearlyLogs();
     }
-  }, [currentYear, toast, firebaseInitialized, db, initError]);
+  }, [fetchAllYearlyLogs, firebaseInitialized, db]); // Added firebaseInitialized, db
 
-
-  const handleTogglePastHabit = async (date: Date, habitName: string, currentStatus: boolean) => {
+  const handleTogglePastHabit = useCallback(async (date: Date, habitName: string, currentStatus: boolean) => {
     if (!firebaseInitialized || !db) {
       toast({ title: 'Error', description: 'Cannot update habit: Firebase not configured.', variant: 'destructive' });
       return;
@@ -135,6 +127,7 @@ function HabitsPageContent() {
     const dateString = format(date, 'yyyy-MM-dd');
     const dailyDocRef = doc(db, userDailyLogsCollectionPath, dateString);
 
+    // Optimistic UI update
     setAllDailyLogsForYear(prevLogs => {
       const logIndex = prevLogs.findIndex(log => log.date === dateString);
       const newStatus = !currentStatus;
@@ -144,9 +137,10 @@ function HabitsPageContent() {
         updatedLogs[logIndex] = { ...updatedLogs[logIndex], habits: newHabits };
         return updatedLogs;
       } else {
+        // Create new log entry, ensuring all defined habits are present
         const newLog: DailyLogData = { date: dateString, habits: { [habitName]: newStatus } };
-        definedHabits.forEach(h => {
-          if (!(h.name in newLog.habits)) {
+        definedHabits.forEach(h => { // Ensure all defined habits are initialized in the new log
+          if (!(h.name in newLog.habits)) { // Check if habit already set (it is for `habitName`)
             newLog.habits[h.name] = false; 
           }
         });
@@ -161,11 +155,12 @@ function HabitsPageContent() {
       if (docSnap.exists()) {
         newHabitsData = { ...docSnap.data().habits };
       } else {
+        // Initialize all defined habits if document is new
         definedHabits.forEach(h => {
           newHabitsData[h.name] = false;
         });
       }
-      newHabitsData[habitName] = !currentStatus; 
+      newHabitsData[habitName] = !currentStatus; // Toggle the specific habit
 
       await setDoc(dailyDocRef, { date: dateString, habits: newHabitsData }, { merge: true });
 
@@ -180,18 +175,19 @@ function HabitsPageContent() {
         description: 'Could not update habit status. Reverting change.',
         variant: 'destructive',
       });
+      // Re-fetch logs to revert optimistic update on error
       await fetchAllYearlyLogs();
     }
-  };
+  }, [firebaseInitialized, db, toast, definedHabits, fetchAllYearlyLogs]); // Added dependencies
 
-  if (initError) {
+  if (!firebaseInitialized) {
     return (
       <div className="container mx-auto max-w-4xl p-4 md:p-8">
         <Card className="shadow-xl rounded-xl mb-8">
           <CardContent className="p-6 text-center text-destructive-foreground bg-destructive/80 rounded-md">
             <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
             <CardTitle className="text-xl font-semibold">Configuration Error</CardTitle>
-            <CardDescription className="text-destructive-foreground/80">{initError}</CardDescription>
+            <CardDescription className="text-destructive-foreground/80">{fbConfigError || "Firebase is not configured correctly."}</CardDescription>
           </CardContent>
         </Card>
       </div>

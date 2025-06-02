@@ -6,7 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { db, USER_ID, firebaseInitialized, firebaseInitError as fbInitError } from '@/lib/firebase';
+import { db, USER_ID, firebaseInitialized, firebaseInitError as fbConfigError } from '@/lib/firebase';
 import {
   doc,
   getDoc,
@@ -39,21 +39,14 @@ export default function HabitListComponent() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [newHabitName, setNewHabitName] = useState('');
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [initError, setInitError] = useState<string | null>(null);
+  // No separate initError needed, fbConfigError from firebase.ts is the source of truth for config issues
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!firebaseInitialized) {
-      setInitError(fbInitError || "Firebase is not initialized. Please check configuration.");
+    if (!firebaseInitialized || !db) {
       setIsLoading(false);
-      return;
+      return; // Config error handled by main return
     }
-    if (!db) {
-        setInitError("Firestore database instance is not available.");
-        setIsLoading(false);
-        return;
-    }
-    setInitError(null); // Clear init error if Firebase is good
 
     setIsLoading(true);
     const habitsColRef = collection(db, userHabitsCollectionPath);
@@ -75,18 +68,18 @@ export default function HabitListComponent() {
         console.error('Error fetching habit definitions:', error);
         toast({
           title: 'Error Loading Habit Definitions',
-          description: 'Could not load your habit list. Please check your connection or browser storage. Showing empty list.',
+          description: 'Could not load your habit list.',
           variant: 'destructive',
         });
-        setDefinedHabits([]);
+        setDefinedHabits([]); // Clear habits on error
         setIsLoading(false);
       }
     );
     return () => unsubscribe();
-  }, [toast]);
+  }, [toast, firebaseInitialized, db]); // Added firebaseInitialized, db
 
   const fetchDailyCompletions = useCallback(async () => {
-    if (!firebaseInitialized || !db) return;
+    if (!firebaseInitialized || !db) return; // Guard against operations if Firebase not ready
     try {
       const dailyDocRef = doc(db, getDailyHabitsDocPath(currentDate));
       const docSnap = await getDoc(dailyDocRef);
@@ -104,13 +97,13 @@ export default function HabitListComponent() {
         variant: 'destructive',
       });
     }
-  }, [currentDate, toast]);
+  }, [currentDate, toast, firebaseInitialized, db]); // Added firebaseInitialized, db
 
   useEffect(() => {
     if (firebaseInitialized && db) {
       fetchDailyCompletions();
     }
-  }, [fetchDailyCompletions, firebaseInitialized, db]);
+  }, [fetchDailyCompletions, firebaseInitialized, db]); // Added firebaseInitialized, db
 
   const handleAddHabit = async () => {
     if (!firebaseInitialized || !db) {
@@ -196,12 +189,12 @@ export default function HabitListComponent() {
     }
   };
   
-  if (initError) {
+  if (!firebaseInitialized) {
     return (
       <div className="w-full p-4 text-center text-destructive-foreground bg-destructive/80 rounded-md">
         <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
         <p className="font-semibold">Configuration Error</p>
-        <p className="text-sm">{initError}</p>
+        <p className="text-sm">{fbConfigError || "Firebase is not configured. Please check console and setup."}</p>
       </div>
     );
   }
