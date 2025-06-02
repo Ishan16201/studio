@@ -25,6 +25,7 @@ if (!apiKey || !authDomain || !projectId) {
     "CRITICAL: Missing essential Firebase configuration values (e.g., NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, NEXT_PUBLIC_FIREBASE_PROJECT_ID). " +
     "Please check your environment variables (e.g., .env.local), ensure they are prefixed with NEXT_PUBLIC_, and restart your development server.";
   console.error(firebaseInitError);
+  // firebaseInitialized remains false, app and db remain null
 } else {
   const firebaseConfig = {
     apiKey: apiKey,
@@ -42,7 +43,7 @@ if (!apiKey || !authDomain || !projectId) {
       db = getFirestore(app);
       firebaseInitialized = true;
 
-      if (typeof window !== 'undefined') {
+      if (typeof window !== 'undefined' && db) { // Ensure db is not null before calling enableIndexedDbPersistence
         enableIndexedDbPersistence(db, { cacheSizeBytes: CACHE_SIZE_UNLIMITED })
           .then(() => {
             console.log("Firestore offline persistence enabled successfully.");
@@ -66,8 +67,8 @@ if (!apiKey || !authDomain || !projectId) {
     }
   } else {
     app = getApps()[0];
-    db = getFirestore(app); // Ensure db is assigned here too if app already exists
-    firebaseInitialized = true; // Assume if app exists, it was initialized correctly
+    db = getFirestore(app); 
+    firebaseInitialized = true; 
   }
 }
 
