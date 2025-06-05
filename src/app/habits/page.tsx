@@ -31,11 +31,8 @@ function HabitsPageContent() {
   const [allDailyLogsForYear, setAllDailyLogsForYear] = useState<DailyLogData[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(true);
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-  // const [initError, setInitError] = useState<string | null>(null); // Use fbConfigError directly
   const { toast } = useToast();
 
-  // This effect is primarily to set loading states based on Firebase init.
-  // The actual error display for fbConfigError will be handled by the main return.
   useEffect(() => {
     if (!firebaseInitialized) {
       setIsLoadingHabits(false);
@@ -44,11 +41,10 @@ function HabitsPageContent() {
   }, [firebaseInitialized]);
 
 
-  // Fetch defined habits
   useEffect(() => {
     if (!firebaseInitialized || !db) {
       setIsLoadingHabits(false); 
-      return; // Config error handled by main return
+      return;
     }
     setIsLoadingHabits(true);
     const habitsColRef = collection(db, userHabitsCollectionPath);
@@ -77,12 +73,12 @@ function HabitsPageContent() {
       }
     );
     return () => unsubscribe();
-  }, [toast, firebaseInitialized, db]); // Added firebaseInitialized, db
+  }, [toast, firebaseInitialized, db]);
 
   const fetchAllYearlyLogs = useCallback(async () => {
       if (!firebaseInitialized || !db) {
         setIsLoadingLogs(false);
-        return; // Config error handled by main return
+        return;
       }
       setIsLoadingLogs(true);
       try {
@@ -111,13 +107,13 @@ function HabitsPageContent() {
       } finally {
         setIsLoadingLogs(false);
       }
-    }, [currentYear, toast, firebaseInitialized, db]); // Added firebaseInitialized, db
+    }, [currentYear, toast, firebaseInitialized, db]);
 
   useEffect(() => {
-    if (firebaseInitialized && db) { // Only fetch if Firebase is ready
+    if (firebaseInitialized && db) {
      fetchAllYearlyLogs();
     }
-  }, [fetchAllYearlyLogs, firebaseInitialized, db]); // Added firebaseInitialized, db
+  }, [fetchAllYearlyLogs, firebaseInitialized, db]);
 
   const handleTogglePastHabit = useCallback(async (date: Date, habitName: string, currentStatus: boolean) => {
     if (!firebaseInitialized || !db) {
@@ -127,7 +123,6 @@ function HabitsPageContent() {
     const dateString = format(date, 'yyyy-MM-dd');
     const dailyDocRef = doc(db, userDailyLogsCollectionPath, dateString);
 
-    // Optimistic UI update
     setAllDailyLogsForYear(prevLogs => {
       const logIndex = prevLogs.findIndex(log => log.date === dateString);
       const newStatus = !currentStatus;
@@ -137,10 +132,9 @@ function HabitsPageContent() {
         updatedLogs[logIndex] = { ...updatedLogs[logIndex], habits: newHabits };
         return updatedLogs;
       } else {
-        // Create new log entry, ensuring all defined habits are present
         const newLog: DailyLogData = { date: dateString, habits: { [habitName]: newStatus } };
-        definedHabits.forEach(h => { // Ensure all defined habits are initialized in the new log
-          if (!(h.name in newLog.habits)) { // Check if habit already set (it is for `habitName`)
+        definedHabits.forEach(h => {
+          if (!(h.name in newLog.habits)) {
             newLog.habits[h.name] = false; 
           }
         });
@@ -155,12 +149,11 @@ function HabitsPageContent() {
       if (docSnap.exists()) {
         newHabitsData = { ...docSnap.data().habits };
       } else {
-        // Initialize all defined habits if document is new
         definedHabits.forEach(h => {
           newHabitsData[h.name] = false;
         });
       }
-      newHabitsData[habitName] = !currentStatus; // Toggle the specific habit
+      newHabitsData[habitName] = !currentStatus;
 
       await setDoc(dailyDocRef, { date: dateString, habits: newHabitsData }, { merge: true });
 
@@ -175,10 +168,9 @@ function HabitsPageContent() {
         description: 'Could not update habit status. Reverting change.',
         variant: 'destructive',
       });
-      // Re-fetch logs to revert optimistic update on error
       await fetchAllYearlyLogs();
     }
-  }, [firebaseInitialized, db, toast, definedHabits, fetchAllYearlyLogs]); // Added dependencies
+  }, [firebaseInitialized, db, toast, definedHabits, fetchAllYearlyLogs]);
 
   if (!firebaseInitialized) {
     return (
@@ -222,7 +214,7 @@ function HabitsPageContent() {
         </p>
       </div>
 
-      {isLoadingHabits || isLoadingLogs ? (
+      {(isLoadingHabits || isLoadingLogs) && definedHabits.length === 0 ? ( // Show skeleton only if loading AND no habits loaded yet
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {Array(2).fill(0).map((_, i) => (
             <Card key={i} className="shadow-lg rounded-xl">
@@ -244,17 +236,19 @@ function HabitsPageContent() {
               habit={habit}
               allDailyLogsForYear={allDailyLogsForYear}
               currentYear={currentYear}
-              isLoadingLogs={isLoadingLogs}
+              isLoadingLogs={isLoadingLogs} // Pass down loading state for individual calendars
               onTogglePastHabit={handleTogglePastHabit}
             />
           ))}
         </div>
       ) : (
-        <Card className="shadow-lg rounded-xl">
-            <CardContent className="p-6 text-center">
-                <p className="text-muted-foreground">No habits defined yet. Add some habits in the "Daily Habit Tracker" section above to see their activity heatmaps here.</p>
-            </CardContent>
-        </Card>
+        !isLoadingHabits && !isLoadingLogs && definedHabits.length === 0 && ( // Only show "No habits" if not loading and no habits
+          <Card className="shadow-lg rounded-xl">
+              <CardContent className="p-6 text-center">
+                  <p className="text-muted-foreground">No habits defined yet. Add some habits in the "Daily Habit Tracker" section above to see their activity heatmaps here.</p>
+              </CardContent>
+          </Card>
+        )
       )}
       
       <p className="text-center text-sm text-muted-foreground mt-10 sm:mt-12">

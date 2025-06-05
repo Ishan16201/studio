@@ -39,18 +39,18 @@ export default function TodoListComponent({
   const [tasks, setTasks] = useState<TodoItem[]>([]);
   const [newTaskText, setNewTaskText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [operationalError, setOperationalError] = useState<string | null>(null); // For errors after init
+  const [operationalError, setOperationalError] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     if (!firebaseInitialized || !db) {
-      // Error is handled by the main return block, no need to set operationalError here for config issues
       setIsLoading(false);
+      // The main return block handles displaying fbConfigError
       return;
     }
 
     setIsLoading(true);
-    setOperationalError(null); // Clear previous operational errors
+    setOperationalError(null);
     const tasksCol = collection(db, 'todos');
     const q = query(
       tasksCol,
@@ -81,7 +81,7 @@ export default function TodoListComponent({
     );
 
     return () => unsubscribe();
-  }, [toast, firebaseInitialized, db]); // Added firebaseInitialized and db
+  }, [toast, firebaseInitialized, db]);
 
   const addTask = async () => {
     if (!firebaseInitialized || !db) {

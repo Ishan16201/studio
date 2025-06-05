@@ -3,13 +3,13 @@
 
 import { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { CalendarDays, Info, PlusCircle } from 'lucide-react';
+import { CalendarDays, Info, PlusCircle, AlertTriangle } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import type { DateRange } from 'react-day-picker';
-
+import { firebaseInitialized, firebaseInitError as fbConfigError } from '@/lib/firebase'; // Import Firebase status
 
 export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
@@ -21,6 +21,25 @@ export default function CalendarPage() {
       description: "Event creation functionality is not yet implemented.",
     });
   };
+
+  if (!firebaseInitialized) {
+    return (
+      <div className="container mx-auto max-w-2xl p-4 md:p-8">
+        <Card className="shadow-xl rounded-xl bg-card">
+          <CardHeader className="text-center bg-destructive text-destructive-foreground rounded-t-xl p-4 sm:p-6">
+            <div className="mx-auto bg-destructive-foreground/20 p-3 rounded-full w-fit mb-2">
+              <AlertTriangle className="w-8 h-8 sm:w-10 sm:h-10 text-destructive-foreground" />
+            </div>
+            <CardTitle className="text-2xl sm:text-3xl font-bold">Configuration Error</CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 text-center">
+            <p className="text-lg text-destructive-foreground">{fbConfigError || "Firebase is not configured correctly. Some app features might be unavailable."}</p>
+            <p className="text-sm text-muted-foreground mt-2">Please check the console for more details or contact support if the issue persists after verifying your setup.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto max-w-2xl p-4 md:p-8">
