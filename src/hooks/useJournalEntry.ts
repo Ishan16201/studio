@@ -3,80 +3,132 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { db, USER_ID, firebaseInitialized, firebaseInitError as fbConfigError } from '@/lib/firebase';
-import { doc, getDoc, DocumentSnapshot, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, DocumentSnapshot, Timestamp, setDoc, addDoc, collection, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import type { JournalEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
-const JOURNAL_DOC_PATH = `journal/${USER_ID}/entry/main`;
+const getJournalEntryDocPath = (entryId: string) => `userJournalEntries/${USER_ID}/entries/${entryId}`;
+const userJournalEntriesCollectionPath = `userJournalEntries/${USER_ID}/entries`;
 
-export function useJournalEntry() {
+export function useJournalEntry(entryId?: string | null) {
   const [entry, setEntry] = useState<JournalEntry | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(!!entryId); // Only load if entryId is provided
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const fetchJournal = useCallback(async (isRefetch = false) => {
-    if (!isRefetch) { // Only set loading to true on initial fetch or explicit full refetch
-        setIsLoading(true);
-    }
+  const fetchJournal = useCallback(async (idToFetch: string) => {
+    setIsLoading(true);
     setError(null);
 
-    if (!firebaseInitialized) {
-      setError(fbConfigError || "Firebase is not initialized. Cannot fetch journal.");
-      if (!isRefetch) setIsLoading(false);
-      // Provide a default empty structure if Firebase isn't up, so UI doesn't break
-      // Only set this default if entry isn't already set from a previous successful fetch during a refetch cycle
-      if (!entry || !isRefetch) {
-         setEntry({ content: '', lastUpdated: new Date(), userId: USER_ID });
-      }
+    if (!firebaseInitialized || !db) {
+      setError(fbConfigError || "Firebase is not initialized. Cannot fetch journal entry.");
+      setIsLoading(false);
+      setEntry(null);
       return;
-    }
-     if (!db) {
-        setError("Firestore database instance is not available. Cannot fetch journal.");
-        if (!isRefetch) setIsLoading(false);
-        if (!entry || !isRefetch) {
-            setEntry({ content: '', lastUpdated: new Date(), userId: USER_ID });
-        }
-        return;
     }
 
     try {
-      const docRef = doc(db, JOURNAL_DOC_PATH);
+      const docRef = doc(db, getJournalEntryDocPath(idToFetch));
       const docSnap: DocumentSnapshot = await getDoc(docRef);
 
       if (docSnap.exists()) {
-        const data = docSnap.data() as Partial<Omit<JournalEntry, 'userId' | 'lastUpdated'> & { lastUpdated: Timestamp }>;
+        const data = docSnap.data();
         setEntry({
+          id: docSnap.id,
           content: data.content || '',
-          lastUpdated: data.lastUpdated ? data.lastUpdated.toDate() : new Date(),
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
+          lastUpdated: data.lastUpdated instanceof Timestamp ? data.lastUpdated.toDate() : new Date(data.lastUpdated),
           userId: USER_ID
         });
       } else {
-        // If no entry exists, provide a default new entry structure
-        setEntry({ content: '', lastUpdated: new Date(), userId: USER_ID });
+        setError("Journal entry not found.");
+        setEntry(null);
       }
     } catch (err: any) {
-      console.error('Error fetching journal:', err);
-      setError(`Could not load your journal: ${err.message}`);
+      console.error('Error fetching journal entry:', err);
+      setError(`Could not load journal entry: ${err.message}`);
       toast({
         title: 'Error',
-        description: `Could not load your journal. Please try again later.`,
+        description: 'Could not load the journal entry.',
         variant: 'destructive',
       });
-      // Fallback to default structure on error too, if not a refetch or no previous entry
-      if (!entry || !isRefetch) {
-        setEntry({ content: '', lastUpdated: new Date(), userId: USER_ID });
-      }
+      setEntry(null);
     } finally {
-      if (!isRefetch) setIsLoading(false);
+      setIsLoading(false);
     }
-  }, [toast, firebaseInitialized, db, fbConfigError, entry]); // Added `entry` to dep array for conditional setEntry
+  }, [toast, firebaseInitialized, db, fbConfigError]);
 
   useEffect(() => {
-    fetchJournal(false); // Initial fetch
-  }, [fetchJournal]); // fetchJournal is stable due to useCallback
+    if (entryId) {
+      fetchJournal(entryId);
+    } else {
+      // If no entryId, it's for a new entry, so initialize with defaults or empty
+      setEntry({ content: '', createdAt: new Date(), lastUpdated: new Date(), userId: USER_ID });
+      setIsLoading(false);
+    }
+  }, [entryId, fetchJournal]);
+
+  const saveJournalEntry = useCallback(async (contentToSave: string, currentEntry: JournalEntry | null): Promise<string | undefined> => {
+    if (!firebaseInitialized || !db) {
+      toast({ title: 'Error', description: 'Cannot save: Firebase not configured.', variant: 'destructive' });
+      setError(fbConfigError || "Firebase not configured.");
+      return undefined;
+    }
+    setIsSaving(true);
+    setError(null);
+
+    const now = serverTimestamp();
+    const entryData = {
+      content: contentToSave,
+      userId: USER_ID,
+      lastUpdated: now,
+    };
+
+    try {
+      if (currentEntry?.id) { // Existing entry
+        const docRef = doc(db, getJournalEntryDocPath(currentEntry.id));
+        await setDoc(docRef, { ...entryData, createdAt: currentEntry.createdAt instanceof Date ? Timestamp.fromDate(currentEntry.createdAt) : currentEntry.createdAt }, { merge: true });
+        toast({ title: 'Journal Updated', description: 'Your entry has been saved.' });
+        return currentEntry.id;
+      } else { // New entry
+        const docRef = await addDoc(collection(db, userJournalEntriesCollectionPath), { ...entryData, createdAt: now });
+        toast({ title: 'Journal Entry Saved', description: 'Your new entry has been created.' });
+        return docRef.id; // Return the new document ID
+      }
+    } catch (err: any) {
+      console.error('Error saving journal entry:', err);
+      setError(`Could not save journal entry: ${err.message}`);
+      toast({ title: 'Save Error', description: 'Could not save your journal entry.', variant: 'destructive' });
+      return undefined;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [toast, firebaseInitialized, db, fbConfigError]);
+  
+  const deleteJournalEntry = useCallback(async (idToDelete: string): Promise<boolean> => {
+    if (!firebaseInitialized || !db) {
+      toast({ title: 'Error', description: 'Cannot delete: Firebase not configured.', variant: 'destructive' });
+      return false;
+    }
+    setIsSaving(true); // Use isSaving to indicate an operation is in progress
+    try {
+      const docRef = doc(db, getJournalEntryDocPath(idToDelete));
+      await deleteDoc(docRef);
+      toast({ title: 'Entry Deleted', description: 'Journal entry has been deleted.' });
+      return true;
+    } catch (error) {
+      console.error("Error deleting journal entry:", error);
+      toast({ title: 'Error', description: 'Could not delete journal entry.', variant: 'destructive' });
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [toast, firebaseInitialized, db]);
+
 
   const finalError = !firebaseInitialized ? (fbConfigError || "Firebase configuration error.") : error;
 
-  return { entry, isLoading, error: finalError, refetch: () => fetchJournal(true) };
+  return { entry, isLoading, isSaving, error: finalError, fetchJournal, saveJournalEntry, deleteJournalEntry };
 }
+

@@ -3,67 +3,62 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Textarea } from '@/components/ui/textarea';
-import { db, USER_ID, firebaseInitialized, firebaseInitError as fbConfigError } from '@/lib/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { Button } from '@/components/ui/button';
+import type { JournalEntry } from '@/types';
 import { useAutosave } from '@/hooks/useAutosave';
-import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useJournalEntry } from '@/hooks/useJournalEntry';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Save } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 
-const JOURNAL_DOC_PATH = `journal/${USER_ID}/entry/main`;
+interface JournalEditorProps {
+  initialEntryData?: Partial<JournalEntry>; // For new or existing entry
+  onSave: (content: string, entryId?: string) => Promise<string | undefined | void>; // Returns new/updated entry ID or void
+  onClose: () => void;
+  isOpen: boolean;
+  isSavingJournal: boolean; // Passed down from parent managing the save state
+  journalError?: string | null; // Passed down error
+}
 
-export default function JournalEditor() {
-  const { entry: initialEntry, isLoading: isLoadingEntry, error: entryLoadingError, refetch } = useJournalEntry();
+export default function JournalEditor({
+  initialEntryData,
+  onSave,
+  onClose,
+  isOpen,
+  isSavingJournal,
+  journalError,
+}: JournalEditorProps) {
   const [content, setContent] = useState<string>('');
   const [isDirty, setIsDirty] = useState<boolean>(false);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState<boolean>(true); // Local loading for initial content set
 
   useEffect(() => {
-    // This effect synchronizes the local `content` state with `initialEntry.content`
-    // when `initialEntry` is loaded or changes, but only if the editor isn't currently dirty
-    // and not currently saving. This prevents overwriting user's ongoing edits.
-    if (initialEntry && !isLoadingEntry && !isDirty && !isSaving) {
-      setContent(initialEntry.content);
-    } else if (!isLoadingEntry && !initialEntry && !isDirty && !isSaving) {
-      // If loading is complete, no entry exists, and not dirty/saving, clear content.
-      setContent('');
+    setIsLoading(true);
+    if (initialEntryData) {
+      setContent(initialEntryData.content || '');
+    } else {
+      setContent(''); // For a completely new entry not yet in DB
     }
-  }, [initialEntry, isLoadingEntry, isDirty, isSaving]);
+    setIsDirty(false); // Reset dirty state when entry changes
+    setIsLoading(false);
+  }, [initialEntryData, isOpen]); // Re-run when dialog opens or initial data changes
 
-  const handleSave = useCallback(async (currentContent: string) => {
-    if (!firebaseInitialized || !db) {
-      toast({ title: 'Error', description: 'Cannot save journal: Firebase not configured.', variant: 'destructive' });
-      return;
-    }
+  const handleInternalSave = useCallback(async (currentContent: string) => {
     if (!isDirty) return; // Don't save if not dirty
-
-    setIsSaving(true);
-    try {
-      const docRef = doc(db, JOURNAL_DOC_PATH);
-      await setDoc(docRef, {
-        content: currentContent,
-        lastUpdated: serverTimestamp(),
-        userId: USER_ID,
-      }, { merge: true });
-      setIsDirty(false); // Mark as not dirty after successful save
-      await refetch(); // Refetch to get the latest server timestamp, etc.
-    } catch (error) {
-      console.error('Error saving journal:', error);
-      toast({
-        title: 'Save Error',
-        description: 'Could not save your journal. Please check your connection.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsSaving(false);
+    
+    // onSave is expected to handle isSaving state and toast
+    const savedEntryId = await onSave(currentContent, initialEntryData?.id);
+    
+    if (savedEntryId) { // If save was successful (indicated by returned ID or just completion)
+        setIsDirty(false);
+        // If it was a new entry and we got an ID, we might want to update initialEntryData if editor stays open
+        // For now, onClose will typically be called by parent
     }
-  }, [toast, refetch, firebaseInitialized, db, isDirty]);
+    // If save failed, error will be handled by parent via journalError prop & toast
+  }, [onSave, initialEntryData?.id, isDirty]);
 
   useAutosave<string>({
     data: content,
-    onSave: handleSave,
+    onSave: handleInternalSave,
     interval: 2500,
     isDirty: isDirty,
   });
@@ -73,37 +68,67 @@ export default function JournalEditor() {
     setIsDirty(true);
   };
 
-  const configError = !firebaseInitialized ? (fbConfigError || "Firebase configuration error.") : null;
-  const displayError = configError || entryLoadingError;
-
-  // Show skeleton if it's the initial load (isLoadingEntry is true AND initialEntry is not yet populated)
-  // AND there's no overriding display error.
-  if (isLoadingEntry && !initialEntry && !displayError) {
-    return (
-      <div className="p-4 sm:p-6 h-[calc(100vh-200px)] sm:h-[calc(100vh-250px)] md:h-[500px]">
-        <Skeleton className="h-full w-full rounded-md" />
-      </div>
-    );
-  }
+  const handleManualSaveAndClose = async () => {
+    await handleInternalSave(content); // Ensure latest content is saved
+    onClose();
+  };
   
-  if (displayError) {
+  const editorContent = () => {
+    if (isLoading) {
+      return (
+        <div className="p-4 sm:p-6 h-[400px] md:h-[500px]">
+          <Skeleton className="h-full w-full rounded-md" />
+        </div>
+      );
+    }
+    if (journalError && !isLoading) { // Show error only if not loading initial data
+      return (
+        <div className="p-4 sm:p-6 text-center text-destructive-foreground bg-destructive/80 rounded-b-xl h-[400px] md:h-[500px] flex flex-col justify-center items-center">
+          <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
+          <p className="font-semibold">Error</p>
+          <p className="text-sm">{journalError}</p>
+        </div>
+      );
+    }
     return (
-      <div className="p-4 sm:p-6 text-center text-destructive-foreground bg-destructive/80 rounded-b-xl h-[calc(100vh-200px)] sm:h-[calc(100vh-250px)] md:h-[500px] flex flex-col justify-center items-center">
-        <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
-        <p className="font-semibold">Error</p>
-        <p className="text-sm">{displayError}</p>
-      </div>
+       <Textarea
+        value={content}
+        onChange={handleChange}
+        placeholder="What's on your mind? Your progress, your struggles, your wins... Type it all out."
+        className="w-full h-[350px] sm:h-[400px] md:h-[450px] p-4 text-sm sm:text-base border-0 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none bg-background text-foreground"
+        aria-label="Journal Entry"
+        disabled={isSavingJournal || journalError ? true : false}
+      />
     );
-  }
+  };
+
 
   return (
-    <Textarea
-      value={content}
-      onChange={handleChange}
-      placeholder="What's on your mind? Your progress, your struggles, your wins... Type it all out."
-      className="w-full h-[calc(100vh-250px)] sm:h-[calc(100vh-300px)] md:h-[calc(100vh-220px)] p-4 sm:p-6 text-sm sm:text-base md:text-lg border-0 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none rounded-b-xl bg-card text-card-foreground"
-      aria-label="Journal Entry"
-      disabled={!firebaseInitialized || isLoadingEntry || isSaving || !!displayError}
-    />
+    <Dialog open={isOpen} onOpenChange={(openState) => !openState && onClose()}>
+      <DialogContent className="sm:max-w-2xl w-[90vw] h-[80vh] flex flex-col p-0">
+        <DialogHeader className="p-4 border-b">
+          <DialogTitle>{initialEntryData?.id ? 'Edit Entry' : 'New Journal Entry'}</DialogTitle>
+          {initialEntryData?.lastUpdated && (
+            <DialogDescription className="text-xs">
+              Last saved: {initialEntryData.lastUpdated instanceof Date ? format(initialEntryData.lastUpdated, 'Pp') : 'Recently'}
+            </DialogDescription>
+          )}
+        </DialogHeader>
+        <div className="flex-grow overflow-y-auto">
+         {editorContent()}
+        </div>
+        <DialogFooter className="p-4 border-t">
+          <span className="text-xs text-muted-foreground mr-auto">
+            {isSavingJournal ? 'Saving...' : isDirty ? 'Unsaved changes' : 'Autosaved'}
+          </span>
+          <Button type="button" variant="outline" onClick={onClose} disabled={isSavingJournal}>
+            Close
+          </Button>
+          <Button type="button" onClick={handleManualSaveAndClose} disabled={isSavingJournal || !isDirty}>
+             <Save className="mr-2 h-4 w-4" /> Save & Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -14,8 +14,10 @@ export interface DailyHabits {
 }
 
 export interface JournalEntry {
+  id?: string; // Firestore document ID, optional for new entries
   content: string;
-  lastUpdated: Timestamp | Date; // Store as Firestore Timestamp, can be Date in client
+  createdAt: Timestamp; // Firestore Timestamp for creation
+  lastUpdated: Timestamp; // Firestore Timestamp for last update
   userId?: string;
 }
 

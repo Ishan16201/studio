@@ -8,9 +8,10 @@ import { ArrowRight, BookOpenText, History, Users, CalendarDays, CheckSquare, Sp
 import Image from 'next/image';
 import { format } from 'date-fns';
 import TodoListComponent from '@/components/todo/TodoListComponent';
+import UpcomingEventsWidget from '@/components/dashboard/UpcomingEventsWidget'; // Import new widget
 import { cn } from '@/lib/utils';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
-import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
+import { useAuth } from '@/contexts/AuthContext'; 
 
 interface DashboardWidgetProps {
   title: string;
@@ -20,21 +21,22 @@ interface DashboardWidgetProps {
   children?: React.ReactNode;
   className?: string;
   borderColor?: string; 
+  contentClassName?: string; // For styling child content specifically
 }
 
-function DashboardWidget({ title, description, href, icon: Icon, children, className, borderColor }: DashboardWidgetProps) {
+function DashboardWidget({ title, description, href, icon: Icon, children, className, borderColor, contentClassName }: DashboardWidgetProps) {
   const content = (
     <Card className={cn("shadow-lg rounded-xl overflow-hidden h-full flex flex-col bg-card text-card-foreground", borderColor ? `border-2 ${borderColor}` : '', className)}>
-      <CardHeader>
+      <CardHeader className="pb-3"> {/* Reduced padding bottom */}
         <div className="flex items-center mb-1">
           {Icon && <Icon className="w-5 h-5 mr-2 text-primary" />}
           <CardTitle className="text-lg font-semibold">{title}</CardTitle>
         </div>
         {description && <CardDescription className="text-xs text-muted-foreground">{description}</CardDescription>}
       </CardHeader>
-      <CardContent className="flex-grow flex flex-col justify-between p-4 sm:p-6">
+      <CardContent className={cn("flex-grow flex flex-col justify-between p-3 sm:p-4", contentClassName)}> {/* Reduced padding */}
         {children}
-        {href && (
+        {href && !children && ( // Render button only if href and no children explicitly passed to fill content
           <Button asChild variant="outline" size="sm" className="mt-auto w-full group border-primary/50 hover:bg-primary/10">
             <Link href={href}>
               Go to {title}
@@ -45,7 +47,7 @@ function DashboardWidget({ title, description, href, icon: Icon, children, class
       </CardContent>
     </Card>
   );
-
+  // If it's a simple link widget with no children, wrap the whole thing in a Link
   return href && !children ? <Link href={href} className="block h-full">{content}</Link> : content;
 }
 
@@ -53,7 +55,7 @@ function DashboardWidget({ title, description, href, icon: Icon, children, class
 function HomePageContent() {
   const today = new Date();
   const formattedDate = format(today, "eeee, MMMM do");
-  const { user } = useAuth(); // Get user from AuthContext
+  const { user } = useAuth(); 
   
   return (
     <div className="min-h-screen text-foreground p-0">
@@ -69,10 +71,11 @@ function HomePageContent() {
           title="Daily Tasks"
           borderColor="border-primary"
           className="lg:col-span-1 md:row-span-2"
+          contentClassName="p-0" // Remove padding for TodoList
         >
           <TodoListComponent 
             showTitle={false} 
-            maxHeight="max-h-[280px] sm:max-h-[320px] md:max-h-[calc(100%-4rem)]"
+            maxHeight="max-h-[280px] sm:max-h-[320px] md:max-h-[calc(100%-2rem)]" // Adjusted for CardHeader
             enableAdding={true} 
           />
         </DashboardWidget>
@@ -97,8 +100,14 @@ function HomePageContent() {
           borderColor="border-green-500"
           className="lg:col-span-1 min-h-[150px] md:min-h-full"
         >
-          <div className="text-center py-4 px-2">
-             <p className="text-sm text-muted-foreground mb-3">Check in on your habit progress or start tracking.</p>
+           <div className="flex flex-col justify-center items-center h-full text-center py-4 px-2">
+             <p className="text-sm text-muted-foreground mb-3">Check in on your habit progress or start tracking new ones.</p>
+             <Button asChild variant="outline" size="sm" className="mt-auto group border-primary/50 hover:bg-primary/10">
+                <Link href="/habits">
+                View Habits
+                <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </Link>
+            </Button>
           </div>
         </DashboardWidget>
 
@@ -110,22 +119,32 @@ function HomePageContent() {
           borderColor="border-purple-500"
           className="lg:col-span-1 md:col-span-2 lg:col-start-2 min-h-[150px] md:min-h-full"
         >
-          <div className="text-center py-4 px-2">
-            <p className="text-sm text-muted-foreground mb-3">A new entry awaits your insights for today.</p>
+          <div className="flex flex-col justify-center items-center h-full text-center py-4 px-2">
+            <p className="text-sm text-muted-foreground mb-3">A new entry awaits your insights. Open your journal.</p>
+             <Button asChild variant="outline" size="sm" className="mt-auto group border-primary/50 hover:bg-primary/10">
+                <Link href="/journal">
+                Open Journal
+                <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </Link>
+            </Button>
           </div>
         </DashboardWidget>
         
         <DashboardWidget
           title="Upcoming Events"
           description="Your schedule at a glance."
-          href="/calendar"
           icon={CalendarDays}
           borderColor="border-blue-500"
-           className="lg:col-span-1 min-h-[150px] md:min-h-full"
+          className="lg:col-span-1 min-h-[150px] md:min-h-full"
+          contentClassName="p-1" // Reduced padding for event list
         >
-          <div className="text-center py-4 px-2">
-            <p className="text-sm text-muted-foreground mb-3">Check your calendar for important dates and events.</p>
-          </div>
+          <UpcomingEventsWidget maxEvents={3} />
+           <Button asChild variant="ghost" size="sm" className="mt-auto w-full group text-primary hover:text-primary/80 justify-center text-xs">
+                <Link href="/calendar">
+                View Full Calendar
+                <ArrowRight className="ml-1 h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                </Link>
+            </Button>
         </DashboardWidget>
 
          <DashboardWidget

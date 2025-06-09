@@ -28,25 +28,23 @@ export default function CalendarPage() {
   const fetchEventsForMonth = useCallback((date: Date) => {
     if (!firebaseInitialized || !db) {
       setIsLoadingEvents(false);
-      return () => {}; // Return an empty function for unsubscribe
+      return () => {}; 
     }
     setIsLoadingEvents(true);
     const monthStart = startOfMonth(date);
     const monthEnd = endOfMonth(date);
 
     const eventsColRef = collection(db, userEventsCollectionPath);
-    // Query for events within the start and end of the month
     const q = query(eventsColRef, 
                     where('date', '>=', format(monthStart, 'yyyy-MM-dd')), 
                     where('date', '<=', format(monthEnd, 'yyyy-MM-dd')),
-                    orderBy('date', 'asc') // Order by date
+                    orderBy('date', 'asc') 
                   );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedEvents = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
-        // Ensure createdAt is a Timestamp if it comes from serverTimestamp, otherwise handle its type
         createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt : Timestamp.now(), 
       })) as CalendarEvent[];
       setEvents(fetchedEvents);
@@ -57,20 +55,18 @@ export default function CalendarPage() {
       setIsLoadingEvents(false);
     });
     return unsubscribe;
-  }, [toast]); // Dependencies: firebaseInitialized, db, USER_ID, toast are stable or from context/constants
+  }, [toast, firebaseInitialized, db]); // firebaseInitialized and db added as deps
 
   useEffect(() => {
-    if (selectedDate && firebaseInitialized && db) { // Ensure firebase is ready
+    if (selectedDate && firebaseInitialized && db) { 
       const unsubscribe = fetchEventsForMonth(selectedDate);
       return () => unsubscribe?.();
     }
-  }, [selectedDate, fetchEventsForMonth, firebaseInitialized, db]); // Add firebaseInitialized and db
+  }, [selectedDate, fetchEventsForMonth, firebaseInitialized, db]); 
 
   useEffect(() => {
     if (selectedDate) {
       const dateString = format(selectedDate, 'yyyy-MM-dd');
-      // Filter events based on the exact date string.
-      // Events dates are stored as 'yyyy-MM-dd'.
       setSelectedDayEvents(events.filter(event => event.date === dateString));
     } else {
       setSelectedDayEvents([]);
@@ -84,16 +80,23 @@ export default function CalendarPage() {
       return;
     }
     try {
+      // Optimistic UI update can be added here if desired, though onSnapshot will handle it
+      // For example:
+      // const tempId = Math.random().toString(36).substring(2);
+      // const newEventOptimistic = { ...eventData, id: tempId, userId: USER_ID, createdAt: Timestamp.now() };
+      // setEvents(prev => [...prev, newEventOptimistic].sort((a,b) => a.date.localeCompare(b.date)));
+
       await addDoc(collection(db, userEventsCollectionPath), {
-        ...eventData, // title, description, date (yyyy-MM-dd format)
+        ...eventData, 
         userId: USER_ID,
-        createdAt: serverTimestamp(), // Use Firestore server timestamp
+        createdAt: serverTimestamp(),
       });
-      toast({ title: "Event Added", description: `"${eventData.title}" has been added to your calendar.` });
-      // fetchEventsForMonth is not explicitly called here because onSnapshot will automatically update.
+      toast({ title: "Event Added", description: `"${eventData.title}" has been added.` });
+      // onSnapshot will update the list, no explicit fetchEventsForMonth needed here
     } catch (error) {
       console.error("Error adding event:", error);
       toast({ title: "Error", description: "Could not save the event.", variant: "destructive" });
+      // Revert optimistic update if implemented
     }
   };
 
@@ -102,6 +105,9 @@ export default function CalendarPage() {
       toast({ title: "Error", description: "Firebase not configured. Cannot delete event.", variant: "destructive" });
       return;
     }
+    // Optimistic UI update
+    // const eventsBeforeDelete = [...events];
+    // setEvents(prev => prev.filter(event => event.id !== eventId));
     try {
       await deleteDoc(doc(db, userEventsCollectionPath, eventId));
       toast({ title: "Event Deleted", description: "The event has been removed." });
@@ -109,11 +115,10 @@ export default function CalendarPage() {
     } catch (error) {
       console.error("Error deleting event:", error);
       toast({ title: "Error", description: "Could not delete the event.", variant: "destructive" });
+      // setEvents(eventsBeforeDelete); // Revert optimistic update
     }
   };
   
-  // Parse event.date which is 'yyyy-MM-dd' string.
-  // Using replace(/-/g, '/') is a common trick to help Date constructor parse correctly across browsers.
   const daysWithEventsModifier = events.map(event => parseISO(event.date));
 
   if (!firebaseInitialized) {
@@ -127,8 +132,8 @@ export default function CalendarPage() {
             <CardTitle className="text-2xl sm:text-3xl font-bold">Configuration Error</CardTitle>
           </CardHeader>
           <CardContent className="p-6 text-center">
-            <p className="text-lg text-destructive-foreground">{fbConfigError || "Firebase is not configured correctly. Some app features might be unavailable."}</p>
-            <p className="text-sm text-muted-foreground mt-2">Please check the console for more details or contact support if the issue persists after verifying your setup.</p>
+            <p className="text-lg text-destructive-foreground">{fbConfigError || "Firebase is not configured correctly. Calendar features might be unavailable."}</p>
+            <p className="text-sm text-muted-foreground mt-2">Please check your environment variables and ensure Firebase is set up correctly.</p>
           </CardContent>
         </Card>
       </div>
@@ -159,8 +164,8 @@ export default function CalendarPage() {
               className="rounded-md border bg-popover text-popover-foreground w-full sm:max-w-md"
               initialFocus
               modifiers={{ daysWithEvents: daysWithEventsModifier }}
-              modifiersClassNames={{ daysWithEvents: 'bg-accent text-accent-foreground rounded-full' }} // Enhanced visibility
-              onMonthChange={(month) => fetchEventsForMonth(month)} // Fetch events when month changes
+              modifiersClassNames={{ daysWithEvents: 'bg-accent text-accent-foreground rounded-full font-bold' }}
+              onMonthChange={(month) => fetchEventsForMonth(month)}
             />
             {selectedDate && (
               <p className="mt-4 text-center text-sm text-muted-foreground">
@@ -180,7 +185,7 @@ export default function CalendarPage() {
                 </div>
             ) : selectedDayEvents.length > 0 ? (
               <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
-                {selectedDayEvents.map(event => (
+                {selectedDayEvents.sort((a,b) => a.title.localeCompare(b.title)).map(event => ( // Sort selected day events by title
                   <EventItem key={event.id} event={event} onDelete={handleDeleteEvent} />
                 ))}
               </div>
