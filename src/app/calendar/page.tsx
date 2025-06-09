@@ -1,26 +1,109 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { CalendarDays, Info, PlusCircle, AlertTriangle } from 'lucide-react';
+import { CalendarDays, Info, PlusCircle, AlertTriangle, List } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
-import type { DateRange } from 'react-day-picker';
-import { firebaseInitialized, firebaseInitError as fbConfigError } from '@/lib/firebase'; // Import Firebase status
+import { format, startOfMonth, endOfMonth } from 'date-fns';
+import type { CalendarEvent } from '@/types';
+import { firebaseInitialized, firebaseInitError as fbConfigError, db, USER_ID } from '@/lib/firebase';
+import { collection, addDoc, query, where, onSnapshot, deleteDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import EventFormDialog from '@/components/calendar/EventFormDialog';
+import EventItem from '@/components/calendar/EventItem';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const userEventsCollectionPath = `userEvents/${USER_ID}/events`;
 
 export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [showEventForm, setShowEventForm] = useState(false);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [selectedDayEvents, setSelectedDayEvents] = useState<CalendarEvent[]>([]);
+  const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const { toast } = useToast();
 
-  const handleAddEvent = () => {
-    toast({
-      title: "Add Event Clicked",
-      description: "Event creation functionality is not yet implemented.",
+  const fetchEventsForMonth = useCallback((date: Date) => {
+    if (!firebaseInitialized || !db) {
+      setIsLoadingEvents(false);
+      return;
+    }
+    setIsLoadingEvents(true);
+    const monthStart = format(startOfMonth(date), 'yyyy-MM-dd');
+    const monthEnd = format(endOfMonth(date), 'yyyy-MM-dd');
+
+    const eventsColRef = collection(db, userEventsCollectionPath);
+    const q = query(eventsColRef, where('date', '>=', monthStart), where('date', '<=', monthEnd), orderBy('date', 'asc'));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedEvents = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as CalendarEvent[];
+      setEvents(fetchedEvents);
+      setIsLoadingEvents(false);
+    }, (error) => {
+      console.error("Error fetching month events:", error);
+      toast({ title: "Error", description: "Could not load events for the month.", variant: "destructive" });
+      setIsLoadingEvents(false);
     });
+    return unsubscribe;
+  }, [toast]);
+
+  useEffect(() => {
+    if (selectedDate) {
+      const unsubscribe = fetchEventsForMonth(selectedDate);
+      return () => unsubscribe?.();
+    }
+  }, [selectedDate, fetchEventsForMonth]);
+
+  useEffect(() => {
+    if (selectedDate) {
+      const dateString = format(selectedDate, 'yyyy-MM-dd');
+      setSelectedDayEvents(events.filter(event => event.date === dateString));
+    } else {
+      setSelectedDayEvents([]);
+    }
+  }, [selectedDate, events]);
+
+
+  const handleAddEvent = async (eventData: Omit<CalendarEvent, 'id' | 'userId' | 'createdAt'>) => {
+    if (!firebaseInitialized || !db) {
+      toast({ title: "Error", description: "Firebase not configured. Cannot save event.", variant: "destructive" });
+      return;
+    }
+    try {
+      await addDoc(collection(db, userEventsCollectionPath), {
+        ...eventData,
+        userId: USER_ID,
+        createdAt: serverTimestamp(),
+      });
+      toast({ title: "Event Added", description: `"${eventData.title}" has been added to your calendar.` });
+      // fetchEventsForMonth will update events due to onSnapshot
+    } catch (error) {
+      console.error("Error adding event:", error);
+      toast({ title: "Error", description: "Could not save the event.", variant: "destructive" });
+    }
   };
+
+  const handleDeleteEvent = async (eventId: string) => {
+    if (!firebaseInitialized || !db) {
+      toast({ title: "Error", description: "Firebase not configured. Cannot delete event.", variant: "destructive" });
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, userEventsCollectionPath, eventId));
+      toast({ title: "Event Deleted", description: "The event has been removed." });
+      // onSnapshot will update the list
+    } catch (error) {
+      console.error("Error deleting event:", error);
+      toast({ title: "Error", description: "Could not delete the event.", variant: "destructive" });
+    }
+  };
+  
+  const daysWithEventsModifier = events.map(event => new Date(event.date.replace(/-/g, '/'))); // Ensure correct Date parsing
 
   if (!firebaseInitialized) {
     return (
@@ -42,7 +125,7 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-2xl p-4 md:p-8">
+    <div className="container mx-auto max-w-4xl p-4 md:p-8"> {/* Increased max-w for more space */}
       <Card className="shadow-xl rounded-xl bg-card">
         <CardHeader className="text-center bg-primary text-primary-foreground rounded-t-xl p-4 sm:p-6">
            <div className="mx-auto bg-primary-foreground/20 p-3 rounded-full w-fit mb-2">
@@ -53,30 +136,56 @@ export default function CalendarPage() {
             Manage your schedule and upcoming events.
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-4 md:p-6 flex flex-col items-center">
-          <Button onClick={handleAddEvent} className="mb-6 w-full sm:w-auto">
-            <PlusCircle className="mr-2 h-4 w-4" /> New Event
-          </Button>
-          <Calendar
-            mode="single"
-            selected={selectedDate}
-            onSelect={setSelectedDate}
-            className="rounded-md border bg-popover text-popover-foreground w-full sm:max-w-md"
-            initialFocus
-          />
-          {selectedDate && (
-            <p className="mt-4 text-center text-sm text-muted-foreground">
-              Selected: {format(selectedDate, 'PPP')}
-            </p>
-          )}
+        <CardContent className="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="flex flex-col items-center">
+            <Button onClick={() => setShowEventForm(true)} className="mb-6 w-full sm:w-auto">
+              <PlusCircle className="mr-2 h-4 w-4" /> New Event
+            </Button>
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={setSelectedDate}
+              className="rounded-md border bg-popover text-popover-foreground w-full sm:max-w-md"
+              initialFocus
+              modifiers={{ daysWithEvents: daysWithEventsModifier }}
+              modifiersClassNames={{ daysWithEvents: 'bg-accent/30 rounded-full' }}
+              onMonthChange={fetchEventsForMonth} // Fetch events when month changes
+            />
+            {selectedDate && (
+              <p className="mt-4 text-center text-sm text-muted-foreground">
+                Selected: {format(selectedDate, 'PPP')}
+              </p>
+            )}
+          </div>
+          <div className="mt-6 md:mt-0">
+            <h3 className="text-lg font-semibold mb-3 text-foreground flex items-center">
+                <List className="mr-2 h-5 w-5 text-primary"/>
+                Events for {selectedDate ? format(selectedDate, 'MMMM do') : 'Selected Date'}
+            </h3>
+            {isLoadingEvents && !selectedDayEvents.length ? (
+                <div className="space-y-2">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                </div>
+            ) : selectedDayEvents.length > 0 ? (
+              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                {selectedDayEvents.map(event => (
+                  <EventItem key={event.id} event={event} onDelete={handleDeleteEvent} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">No events for this day.</p>
+            )}
+          </div>
         </CardContent>
-        <CardFooter className="p-4 md:p-6 border-t">
-            <div className="flex items-start space-x-2 text-xs text-muted-foreground">
-                <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                <p>This is a basic calendar view. Click 'New Event' to (eventually) add events. Full event management features are planned for future updates.</p>
-            </div>
-        </CardFooter>
+        {/* Footer removed as per request */}
       </Card>
+      <EventFormDialog
+        isOpen={showEventForm}
+        onClose={() => setShowEventForm(false)}
+        onSave={handleAddEvent}
+        selectedDate={selectedDate}
+      />
        <p className="text-center text-sm text-muted-foreground mt-6 sm:mt-8">
         Your events, all in one place. Stay organized.
       </p>

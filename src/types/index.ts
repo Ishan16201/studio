@@ -4,7 +4,6 @@ import type { Timestamp } from 'firebase/firestore';
 export interface Habit {
   id: string; // Firestore document ID for the habit definition
   name: string;
-  // completed: boolean; // This was for the old PREDEFINED_HABITS, not directly used for Firestore habit definitions
   createdAt?: Timestamp; // When the habit definition was created
   userId?: string;
 }
@@ -42,5 +41,13 @@ export interface UserProfile {
   name: string;
   phone?: string; // Optional
   email: string;
-  // Password is not stored directly, handled by Firebase Auth
+}
+
+export interface CalendarEvent {
+  id: string; // Firestore document ID
+  title: string;
+  description?: string;
+  date: string; // YYYY-MM-DD format
+  userId: string;
+  createdAt: Timestamp;
 }
