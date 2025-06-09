@@ -31,15 +31,15 @@ const MonthGrid: React.FC<MonthGridProps> = ({ month, dailyLogs, habitName, onTo
   const monthStart = startOfMonth(month);
   const monthEnd = endOfMonth(month);
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
-  const firstDayOfMonth = monthStart.getDay();
+  const firstDayOfMonth = monthStart.getDay(); // 0 (Sun) - 6 (Sat)
   const monthName = format(month, 'MMM');
 
   return (
-    <div className="flex flex-col items-center shrink-0 p-1"> {/* shrink-0 is important for flex row */}
-      <div className="text-xs text-muted-foreground mb-1">{monthName}</div>
-      <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
+    <div className="flex flex-col items-center p-1">
+      <div className="text-xs text-muted-foreground mb-1 font-medium">{monthName}</div>
+      <div className="grid grid-cols-7 gap-px sm:gap-0.5"> {/* Reduced gap for tighter fit */}
         {Array.from({ length: firstDayOfMonth }).map((_, i) => (
-          <div key={`blank-${i}`} className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+          <div key={`blank-${i}`} className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> // Adjusted size slightly
         ))}
         {daysInMonth.map((day) => {
           const dayLog = dailyLogs.find(d => d.date === format(day, 'yyyy-MM-dd'));
@@ -54,7 +54,7 @@ const MonthGrid: React.FC<MonthGridProps> = ({ month, dailyLogs, habitName, onTo
                     onClick={() => onTogglePastHabit(day, habitName, isCompleted || false)}
                     aria-label={`Toggle ${habitName} for ${format(day, 'MMMM d, yyyy')}. Status: ${isCompleted ? 'Completed' : isCompleted === false ? 'Not Completed' : 'Not Tracked'}`}
                     className={cn(
-                      "w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-sm transition-all duration-150 ease-in-out focus:outline-none",
+                      "w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-sm transition-all duration-150 ease-in-out focus:outline-none", // Adjusted size slightly
                       colorClass
                     )}
                   />
@@ -97,7 +97,7 @@ export default function HabitActivityCalendar({ habit, allDailyLogsForYear, curr
           <CardDescription>Loading activity heatmap...</CardDescription>
         </CardHeader>
         <CardContent className="p-4 sm:p-6">
-          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" /> {/* Keep skeleton for loading state */}
         </CardContent>
       </Card>
     );
@@ -119,8 +119,9 @@ export default function HabitActivityCalendar({ habit, allDailyLogsForYear, curr
         </CardTitle>
         <CardDescription>Daily completion consistency for this habit.</CardDescription>
       </CardHeader>
-      <CardContent className="p-2 sm:p-4 overflow-x-auto">
-        <div className="flex flex-row gap-0 sm:gap-1"> {/* Changed to flex-row and adjusted gap */}
+      <CardContent className="p-1 sm:p-2"> {/* Reduced padding to maximize space for grid */}
+        {/* Grid layout for months, e.g., 4 months per row on medium screens */}
+        <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-0.5">
            {monthsToDisplay.map(month => (
             <MonthGrid
                 key={format(month, 'yyyy-MM')}

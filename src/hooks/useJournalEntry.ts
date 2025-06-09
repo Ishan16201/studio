@@ -15,33 +15,39 @@ export function useJournalEntry() {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const fetchJournal = useCallback(async () => {
-    setIsLoading(true); // Set loading true at the start of fetch
-    setError(null); // Clear previous operational errors
+  const fetchJournal = useCallback(async (isRefetch = false) => {
+    if (!isRefetch) { // Only set loading to true on initial fetch or explicit full refetch
+        setIsLoading(true);
+    }
+    setError(null);
 
     if (!firebaseInitialized) {
       setError(fbConfigError || "Firebase is not initialized. Cannot fetch journal.");
-      setIsLoading(false);
+      if (!isRefetch) setIsLoading(false);
       // Provide a default empty structure if Firebase isn't up, so UI doesn't break
-      setEntry({ content: '', lastUpdated: new Date(), userId: USER_ID });
+      // Only set this default if entry isn't already set from a previous successful fetch during a refetch cycle
+      if (!entry || !isRefetch) {
+         setEntry({ content: '', lastUpdated: new Date(), userId: USER_ID });
+      }
       return;
     }
      if (!db) {
         setError("Firestore database instance is not available. Cannot fetch journal.");
-        setIsLoading(false);
-        setEntry({ content: '', lastUpdated: new Date(), userId: USER_ID });
+        if (!isRefetch) setIsLoading(false);
+        if (!entry || !isRefetch) {
+            setEntry({ content: '', lastUpdated: new Date(), userId: USER_ID });
+        }
         return;
     }
 
     try {
       const docRef = doc(db, JOURNAL_DOC_PATH);
-      const docSnap: DocumentSnapshot = await getDoc(docRef); // Use generic DocumentSnapshot
+      const docSnap: DocumentSnapshot = await getDoc(docRef);
 
       if (docSnap.exists()) {
         const data = docSnap.data() as Partial<Omit<JournalEntry, 'userId' | 'lastUpdated'> & { lastUpdated: Timestamp }>;
         setEntry({
           content: data.content || '',
-          // Ensure lastUpdated is a Date object for client-side use
           lastUpdated: data.lastUpdated ? data.lastUpdated.toDate() : new Date(),
           userId: USER_ID
         });
@@ -57,18 +63,20 @@ export function useJournalEntry() {
         description: `Could not load your journal. Please try again later.`,
         variant: 'destructive',
       });
-      // Fallback to default structure on error too
-      setEntry({ content: '', lastUpdated: new Date(), userId: USER_ID });
+      // Fallback to default structure on error too, if not a refetch or no previous entry
+      if (!entry || !isRefetch) {
+        setEntry({ content: '', lastUpdated: new Date(), userId: USER_ID });
+      }
     } finally {
-      setIsLoading(false);
+      if (!isRefetch) setIsLoading(false);
     }
-  }, [toast, firebaseInitialized, db, fbConfigError]);
+  }, [toast, firebaseInitialized, db, fbConfigError, entry]); // Added `entry` to dep array for conditional setEntry
 
   useEffect(() => {
-    fetchJournal();
-  }, [fetchJournal]);
+    fetchJournal(false); // Initial fetch
+  }, [fetchJournal]); // fetchJournal is stable due to useCallback
 
   const finalError = !firebaseInitialized ? (fbConfigError || "Firebase configuration error.") : error;
 
-  return { entry, isLoading, error: finalError, refetch: fetchJournal };
+  return { entry, isLoading, error: finalError, refetch: () => fetchJournal(true) };
 }

@@ -28,10 +28,13 @@ export interface PomodoroState {
   cycleCount: number; // To track pomodoro cycles
 }
 
+export type TaskPriority = 'low' | 'medium' | 'urgent';
+
 export interface TodoItem {
   id: string; // Firestore document ID
   text: string;
   completed: boolean;
+  priority: TaskPriority;
   createdAt: Timestamp; // Always Firestore Timestamp when fetched/saved
   userId?: string; // To associate tasks with a user
 }

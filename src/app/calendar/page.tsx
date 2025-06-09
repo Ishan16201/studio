@@ -2,15 +2,15 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { CalendarDays, Info, PlusCircle, AlertTriangle, List } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, parseISO, isSameDay } from 'date-fns';
 import type { CalendarEvent } from '@/types';
 import { firebaseInitialized, firebaseInitError as fbConfigError, db, USER_ID } from '@/lib/firebase';
-import { collection, addDoc, query, where, onSnapshot, deleteDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, query, where, onSnapshot, deleteDoc, doc, serverTimestamp, Timestamp, orderBy } from 'firebase/firestore';
 import EventFormDialog from '@/components/calendar/EventFormDialog';
 import EventItem from '@/components/calendar/EventItem';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -28,19 +28,26 @@ export default function CalendarPage() {
   const fetchEventsForMonth = useCallback((date: Date) => {
     if (!firebaseInitialized || !db) {
       setIsLoadingEvents(false);
-      return;
+      return () => {}; // Return an empty function for unsubscribe
     }
     setIsLoadingEvents(true);
-    const monthStart = format(startOfMonth(date), 'yyyy-MM-dd');
-    const monthEnd = format(endOfMonth(date), 'yyyy-MM-dd');
+    const monthStart = startOfMonth(date);
+    const monthEnd = endOfMonth(date);
 
     const eventsColRef = collection(db, userEventsCollectionPath);
-    const q = query(eventsColRef, where('date', '>=', monthStart), where('date', '<=', monthEnd), orderBy('date', 'asc'));
+    // Query for events within the start and end of the month
+    const q = query(eventsColRef, 
+                    where('date', '>=', format(monthStart, 'yyyy-MM-dd')), 
+                    where('date', '<=', format(monthEnd, 'yyyy-MM-dd')),
+                    orderBy('date', 'asc') // Order by date
+                  );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedEvents = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
+        // Ensure createdAt is a Timestamp if it comes from serverTimestamp, otherwise handle its type
+        createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt : Timestamp.now(), 
       })) as CalendarEvent[];
       setEvents(fetchedEvents);
       setIsLoadingEvents(false);
@@ -50,18 +57,20 @@ export default function CalendarPage() {
       setIsLoadingEvents(false);
     });
     return unsubscribe;
-  }, [toast]);
+  }, [toast]); // Dependencies: firebaseInitialized, db, USER_ID, toast are stable or from context/constants
 
   useEffect(() => {
-    if (selectedDate) {
+    if (selectedDate && firebaseInitialized && db) { // Ensure firebase is ready
       const unsubscribe = fetchEventsForMonth(selectedDate);
       return () => unsubscribe?.();
     }
-  }, [selectedDate, fetchEventsForMonth]);
+  }, [selectedDate, fetchEventsForMonth, firebaseInitialized, db]); // Add firebaseInitialized and db
 
   useEffect(() => {
     if (selectedDate) {
       const dateString = format(selectedDate, 'yyyy-MM-dd');
+      // Filter events based on the exact date string.
+      // Events dates are stored as 'yyyy-MM-dd'.
       setSelectedDayEvents(events.filter(event => event.date === dateString));
     } else {
       setSelectedDayEvents([]);
@@ -76,12 +85,12 @@ export default function CalendarPage() {
     }
     try {
       await addDoc(collection(db, userEventsCollectionPath), {
-        ...eventData,
+        ...eventData, // title, description, date (yyyy-MM-dd format)
         userId: USER_ID,
-        createdAt: serverTimestamp(),
+        createdAt: serverTimestamp(), // Use Firestore server timestamp
       });
       toast({ title: "Event Added", description: `"${eventData.title}" has been added to your calendar.` });
-      // fetchEventsForMonth will update events due to onSnapshot
+      // fetchEventsForMonth is not explicitly called here because onSnapshot will automatically update.
     } catch (error) {
       console.error("Error adding event:", error);
       toast({ title: "Error", description: "Could not save the event.", variant: "destructive" });
@@ -103,7 +112,9 @@ export default function CalendarPage() {
     }
   };
   
-  const daysWithEventsModifier = events.map(event => new Date(event.date.replace(/-/g, '/'))); // Ensure correct Date parsing
+  // Parse event.date which is 'yyyy-MM-dd' string.
+  // Using replace(/-/g, '/') is a common trick to help Date constructor parse correctly across browsers.
+  const daysWithEventsModifier = events.map(event => parseISO(event.date));
 
   if (!firebaseInitialized) {
     return (
@@ -125,7 +136,7 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-4xl p-4 md:p-8"> {/* Increased max-w for more space */}
+    <div className="container mx-auto max-w-4xl p-4 md:p-8">
       <Card className="shadow-xl rounded-xl bg-card">
         <CardHeader className="text-center bg-primary text-primary-foreground rounded-t-xl p-4 sm:p-6">
            <div className="mx-auto bg-primary-foreground/20 p-3 rounded-full w-fit mb-2">
@@ -148,8 +159,8 @@ export default function CalendarPage() {
               className="rounded-md border bg-popover text-popover-foreground w-full sm:max-w-md"
               initialFocus
               modifiers={{ daysWithEvents: daysWithEventsModifier }}
-              modifiersClassNames={{ daysWithEvents: 'bg-accent/30 rounded-full' }}
-              onMonthChange={fetchEventsForMonth} // Fetch events when month changes
+              modifiersClassNames={{ daysWithEvents: 'bg-accent text-accent-foreground rounded-full' }} // Enhanced visibility
+              onMonthChange={(month) => fetchEventsForMonth(month)} // Fetch events when month changes
             />
             {selectedDate && (
               <p className="mt-4 text-center text-sm text-muted-foreground">
@@ -164,8 +175,8 @@ export default function CalendarPage() {
             </h3>
             {isLoadingEvents && !selectedDayEvents.length ? (
                 <div className="space-y-2">
-                    <Skeleton className="h-12 w-full" />
-                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full rounded-md" />
+                    <Skeleton className="h-12 w-full rounded-md" />
                 </div>
             ) : selectedDayEvents.length > 0 ? (
               <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
@@ -178,7 +189,6 @@ export default function CalendarPage() {
             )}
           </div>
         </CardContent>
-        {/* Footer removed as per request */}
       </Card>
       <EventFormDialog
         isOpen={showEventForm}
