@@ -8,6 +8,7 @@ import { ArrowRight, BookOpenText, History, CalendarDays, Sparkles } from 'lucid
 import { format } from 'date-fns';
 import TodoListComponent from '@/components/todo/TodoListComponent';
 import UpcomingEventsWidget from '@/components/dashboard/UpcomingEventsWidget';
+import HabitWidgetDisplay from '@/components/dashboard/HabitWidgetDisplay'; // Import new component
 import { cn } from '@/lib/utils';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext'; 
@@ -21,9 +22,10 @@ interface DashboardWidgetProps {
   className?: string;
   borderColor?: string; 
   contentClassName?: string;
+  fullHeightContent?: boolean; // New prop
 }
 
-function DashboardWidget({ title, description, href, icon: Icon, children, className, borderColor, contentClassName }: DashboardWidgetProps) {
+function DashboardWidget({ title, description, href, icon: Icon, children, className, borderColor, contentClassName, fullHeightContent = false }: DashboardWidgetProps) {
   const content = (
     <Card className={cn("shadow-lg rounded-xl overflow-hidden h-full flex flex-col bg-card text-card-foreground", borderColor ? `border-2 ${borderColor}` : '', className)}>
       <CardHeader className="pb-3">
@@ -33,20 +35,23 @@ function DashboardWidget({ title, description, href, icon: Icon, children, class
         </div>
         {description && <CardDescription className="text-xs text-muted-foreground">{description}</CardDescription>}
       </CardHeader>
-      <CardContent className={cn("flex-grow flex flex-col justify-between p-3 sm:p-4", contentClassName)}>
-        {children}
-        {href && !children && (
-          <Button asChild variant="outline" size="sm" className="mt-auto w-full group border-primary/50 hover:bg-primary/10">
+      <CardContent className={cn("flex-grow flex flex-col p-3 sm:p-4", fullHeightContent ? "justify-between" : "", contentClassName)}>
+        <div className={cn(fullHeightContent ? "flex-grow" : "")}>
+          {children}
+        </div>
+        {href && ( // Always show button if href is provided
+          <Button asChild variant="outline" size="sm" className="mt-auto w-full group border-primary/50 hover:bg-primary/10 text-xs py-1.5 h-auto mt-2">
             <Link href={href}>
               Go to {title}
-              <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+              <ArrowRight className="ml-2 h-3 w-3 transition-transform group-hover:translate-x-1" />
             </Link>
           </Button>
         )}
       </CardContent>
     </Card>
   );
-  return href && !children ? <Link href={href} className="block h-full">{content}</Link> : content;
+  // Link wrapping logic removed as button is now always inside CardContent if href exists
+  return content;
 }
 
 
@@ -70,10 +75,11 @@ function HomePageContent() {
           borderColor="border-primary"
           className="lg:col-span-1 md:row-span-2"
           contentClassName="p-0"
+          fullHeightContent={true}
         >
           <TodoListComponent 
             showTitle={false} 
-            maxHeight="max-h-[280px] sm:max-h-[320px] md:max-h-[calc(100%-2rem)]"
+            maxHeight="max-h-[280px] sm:max-h-[320px] md:max-h-[calc(100%-4rem)]" // Adjusted for button
             enableAdding={true} 
           />
         </DashboardWidget>
@@ -92,21 +98,14 @@ function HomePageContent() {
         
         <DashboardWidget
           title="Habit Tracker"
-          description="Monitor your daily habits."
+          description="Your current habits."
           href="/habits"
           icon={History}
           borderColor="border-green-500"
           className="lg:col-span-1 min-h-[150px] md:min-h-full"
+          fullHeightContent={true}
         >
-           <div className="flex flex-col justify-center items-center h-full text-center py-4 px-2">
-             <p className="text-sm text-muted-foreground mb-3">Check in on your habit progress or start tracking new ones.</p>
-             <Button asChild variant="outline" size="sm" className="mt-auto group border-primary/50 hover:bg-primary/10">
-                <Link href="/habits">
-                View Habits
-                <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </Link>
-            </Button>
-          </div>
+           <HabitWidgetDisplay /> {/* Display habit list here */}
         </DashboardWidget>
 
         <DashboardWidget
@@ -119,12 +118,6 @@ function HomePageContent() {
         >
           <div className="flex flex-col justify-center items-center h-full text-center py-4 px-2">
             <p className="text-sm text-muted-foreground mb-3">A new entry awaits your insights. Open your journal.</p>
-             <Button asChild variant="outline" size="sm" className="mt-auto group border-primary/50 hover:bg-primary/10">
-                <Link href="/journal">
-                Open Journal
-                <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </Link>
-            </Button>
           </div>
         </DashboardWidget>
         
@@ -135,14 +128,10 @@ function HomePageContent() {
           borderColor="border-blue-500"
           className="lg:col-span-1 min-h-[150px] md:min-h-full"
           contentClassName="p-1"
+          fullHeightContent={true}
+          href="/calendar" // Add href here to show "View Full Calendar" button
         >
           <UpcomingEventsWidget maxEvents={3} />
-           <Button asChild variant="ghost" size="sm" className="mt-auto w-full group text-primary hover:text-primary/80 justify-center text-xs">
-                <Link href="/calendar">
-                View Full Calendar
-                <ArrowRight className="ml-1 h-3 w-3 transition-transform group-hover:translate-x-0.5" />
-                </Link>
-            </Button>
         </DashboardWidget>
 
          <DashboardWidget
