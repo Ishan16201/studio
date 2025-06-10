@@ -3,11 +3,11 @@
 
 import { useState, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertTriangle, Dot } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import type { CalendarEvent } from '@/types';
 import { db, USER_ID, firebaseInitialized, firebaseInitError } from '@/lib/firebase';
 import { collection, query, where, orderBy, limit, onSnapshot, Timestamp } from 'firebase/firestore';
-import { format, isSameDay, parseISO } from 'date-fns';
+import { format, isSameDay, parseISO, isValid } from 'date-fns';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
@@ -49,13 +49,22 @@ export default function UpcomingEventsWidget({ maxEvents = 3 }: UpcomingEventsWi
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedEvents = snapshot.docs.map(doc => {
         const data = doc.data();
+        let createdAtDate: Date;
+        if (data.createdAt instanceof Timestamp) {
+            createdAtDate = data.createdAt.toDate();
+        } else if (data.createdAt && typeof data.createdAt.seconds === 'number') {
+            createdAtDate = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds).toDate();
+        } else {
+            createdAtDate = new Date(data.createdAt || 0);
+        }
+        
         return {
           id: doc.id,
           title: data.title,
           description: data.description,
           date: data.date,
           userId: data.userId,
-          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
+          createdAt: createdAtDate,
         } as CalendarEvent;
       });
       setUpcomingEvents(fetchedEvents);
@@ -67,7 +76,7 @@ export default function UpcomingEventsWidget({ maxEvents = 3 }: UpcomingEventsWi
     });
 
     return () => unsubscribe();
-  }, [maxEvents]);
+  }, [maxEvents]); // firebaseInitialized, firebaseInitError, db removed as they are checked inside effect
 
   if (!firebaseInitialized && (error || firebaseInitError)) { 
      return (
@@ -87,11 +96,20 @@ export default function UpcomingEventsWidget({ maxEvents = 3 }: UpcomingEventsWi
       </div>
     );
   }
+  
+  if (error) { // Show non-config related errors
+     return (
+      <div className="p-4 text-center text-xs">
+        <AlertTriangle className="mx-auto h-6 w-6 text-destructive mb-1" />
+        <p className="text-destructive">{error}</p>
+      </div>
+    );
+  }
 
-  if (upcomingEvents.length === 0 && !error) { // Don't show "no events" if there was an error
+  if (upcomingEvents.length === 0) {
     return (
       <p className="text-sm text-muted-foreground text-center p-4">
-        No upcoming events in the near future.
+        No upcoming events.
       </p>
     );
   }
@@ -99,14 +117,19 @@ export default function UpcomingEventsWidget({ maxEvents = 3 }: UpcomingEventsWi
   return (
     <div className="space-y-2 p-1">
       {upcomingEvents.map(event => {
-        const eventDate = parseISO(event.date); // event.date is 'yyyy-MM-dd'
-        const isToday = isSameDay(eventDate, new Date());
+        let eventDate: Date | null = null;
+        try {
+            const parsed = parseISO(event.date);
+            if(isValid(parsed)) eventDate = parsed;
+        } catch { /* ignore parse error */ }
+
+        const isToday = eventDate ? isSameDay(eventDate, new Date()) : false;
         return (
           <Link href={`/calendar?date=${event.date}`} key={event.id} className="block hover:bg-secondary/50 rounded-md p-2 transition-colors">
             <div className="flex items-center justify-between text-xs">
                 <span className={cn("font-medium truncate", isToday ? "text-primary" : "text-foreground")}>{event.title}</span>
                 <span className={cn("text-muted-foreground whitespace-nowrap", isToday ? "font-semibold text-primary" : "")}>
-                    {isToday ? 'Today' : format(eventDate, 'MMM d')}
+                    {isToday ? 'Today' : (eventDate ? format(eventDate, 'MMM d') : 'Invalid Date')}
                 </span>
             </div>
             {event.description && (

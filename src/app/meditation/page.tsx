@@ -1,16 +1,11 @@
 
-'use client'; // Required for ProtectedRoute
+'use client'; 
 
 import AudioPlayerComponent from '@/components/meditation/AudioPlayer';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Headphones, Waves } from 'lucide-react';
+import { Card, CardTitle, CardDescription } from '@/components/ui/card';
+import { Waves } from 'lucide-react';
 import Image from 'next/image';
-import ProtectedRoute from '@/components/auth/ProtectedRoute'; // Import ProtectedRoute
-
-// export const metadata = { // Metadata should be static for server components
-// title: 'Guided Meditation - Grindset',
-// description: 'Find calm and clarity with guided meditation tracks.',
-// };
+import ProtectedRoute from '@/components/auth/ProtectedRoute';
 
 function MeditationPageContent() {
   const meditationTracks = [
@@ -19,7 +14,7 @@ function MeditationPageContent() {
       title: '5-Min Mindful Breathing',
       description: 'A short practice to center yourself and find calm.',
       duration: '5 min',
-      audioSrc: '/sounds/sample_meditation_5min.mp3',
+      audioSrc: '/sounds/sample_meditation_5min.mp3', // Ensure this file exists in public/sounds
       coverArt: 'https://placehold.co/400x400.png',
       aiHint: 'calm nature'
     },
@@ -28,9 +23,27 @@ function MeditationPageContent() {
       title: '10-Min Body Scan',
       description: 'Release tension and connect with your body.',
       duration: '10 min',
-      audioSrc: '/sounds/sample_meditation_10min.mp3',
+      audioSrc: '/sounds/sample_meditation_10min.mp3', // Ensure this file exists in public/sounds
       coverArt: 'https://placehold.co/400x400.png',
       aiHint: 'serene landscape'
+    },
+    {
+      id: '3',
+      title: '3-Min Stress Relief',
+      description: 'Quickly alleviate stress and regain focus.',
+      duration: '3 min',
+      audioSrc: '/sounds/sample_meditation_3min.mp3', // Add another placeholder, ensure file exists if local
+      coverArt: 'https://placehold.co/400x400.png',
+      aiHint: 'peaceful water'
+    },
+    {
+      id: '4',
+      title: '15-Min Deep Relaxation',
+      description: 'A longer session for profound rest and rejuvenation.',
+      duration: '15 min',
+      audioSrc: '/sounds/sample_meditation_15min.mp3', // Add another placeholder
+      coverArt: 'https://placehold.co/400x400.png',
+      aiHint: 'forest path'
     },
   ];
 
@@ -55,8 +68,8 @@ function MeditationPageContent() {
                   <Image 
                     src={track.coverArt} 
                     alt={track.title} 
-                    layout="fill" 
-                    objectFit="cover"
+                    fill // Use fill instead of layout="fill" objectFit="cover" for Next 13+
+                    style={{ objectFit: "cover" }} // Add style for objectFit
                     data-ai-hint={track.aiHint}
                   />
                 </div>

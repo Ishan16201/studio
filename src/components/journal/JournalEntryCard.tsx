@@ -4,8 +4,8 @@
 import type { JournalEntry } from '@/types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { format } from 'date-fns';
-import { Edit3, Trash2, AlertCircle } from 'lucide-react'; // Added AlertCircle for invalid date
+import { format, isValid } from 'date-fns';
+import { Edit3, Trash2, AlertCircle } from 'lucide-react';
 
 interface JournalEntryCardProps {
   entry: JournalEntry;
@@ -14,12 +14,19 @@ interface JournalEntryCardProps {
 }
 
 export default function JournalEntryCard({ entry, onEdit, onDelete }: JournalEntryCardProps) {
-  // Ensure entry.createdAt is a valid Date object
   let displayDate: Date | null = null;
-  if (entry.createdAt instanceof Date && !isNaN(entry.createdAt.getTime())) {
+  if (entry.createdAt instanceof Date && isValid(entry.createdAt)) {
     displayDate = entry.createdAt;
   } else if (entry.createdAt && typeof (entry.createdAt as any).toDate === 'function') { // Firestore Timestamp
-    displayDate = (entry.createdAt as any).toDate();
+    const convertedDate = (entry.createdAt as any).toDate();
+    if (isValid(convertedDate)) {
+      displayDate = convertedDate;
+    }
+  } else if (typeof entry.createdAt === 'string' || typeof entry.createdAt === 'number') {
+    const parsedDate = new Date(entry.createdAt);
+    if (isValid(parsedDate)) {
+      displayDate = parsedDate;
+    }
   }
   
   const contentSnippet = entry.content.substring(0, 150) + (entry.content.length > 150 ? '...' : '');
@@ -29,7 +36,7 @@ export default function JournalEntryCard({ entry, onEdit, onDelete }: JournalEnt
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start">
           <div>
-            {displayDate && !isNaN(displayDate.getTime()) ? (
+            {displayDate ? (
               <>
                 <CardTitle className="text-lg font-semibold">
                   {format(displayDate, 'MMMM do, yyyy')}
@@ -49,7 +56,7 @@ export default function JournalEntryCard({ entry, onEdit, onDelete }: JournalEnt
               <Edit3 className="w-4 h-4" />
               <span className="sr-only">Edit</span>
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => entry.id && onDelete(entry.id)} className="w-8 h-8 text-destructive hover:text-destructive/80" disabled={!entry.id}>
+            <Button variant="ghost" size="icon" onClick={() => onDelete(entry.id)} className="w-8 h-8 text-destructive hover:text-destructive/80" disabled={!entry.id}>
               <Trash2 className="w-4 h-4" />
               <span className="sr-only">Delete</span>
             </Button>

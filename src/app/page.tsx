@@ -4,11 +4,11 @@
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, BookOpenText, History, CalendarDays, Sparkles } from 'lucide-react';
+import { ArrowRight, BookOpenText, History, CalendarDays, Sparkles, CheckSquare } from 'lucide-react';
 import { format } from 'date-fns';
 import TodoListComponent from '@/components/todo/TodoListComponent';
 import UpcomingEventsWidget from '@/components/dashboard/UpcomingEventsWidget';
-import HabitWidgetDisplay from '@/components/dashboard/HabitWidgetDisplay'; // Import new component
+import HabitWidgetDisplay from '@/components/dashboard/HabitWidgetDisplay';
 import { cn } from '@/lib/utils';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext'; 
@@ -22,35 +22,37 @@ interface DashboardWidgetProps {
   className?: string;
   borderColor?: string; 
   contentClassName?: string;
-  fullHeightContent?: boolean; // New prop
+  fullHeightContent?: boolean;
 }
 
 function DashboardWidget({ title, description, href, icon: Icon, children, className, borderColor, contentClassName, fullHeightContent = false }: DashboardWidgetProps) {
   const content = (
     <Card className={cn("shadow-lg rounded-xl overflow-hidden h-full flex flex-col bg-card text-card-foreground", borderColor ? `border-2 ${borderColor}` : '', className)}>
       <CardHeader className="pb-3">
-        <div className="flex items-center mb-1">
-          {Icon && <Icon className="w-5 h-5 mr-2 text-primary" />}
-          <CardTitle className="text-lg font-semibold">{title}</CardTitle>
+        <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center">
+                {Icon && <Icon className="w-5 h-5 mr-2 text-primary" />}
+                <CardTitle className="text-lg font-semibold">{title}</CardTitle>
+            </div>
+            {href && (
+              <Button asChild variant="ghost" size="sm" className="group text-xs py-1 px-2 h-auto text-primary hover:text-primary/80">
+                <Link href={href}>
+                  View all
+                  <ArrowRight className="ml-1 h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                </Link>
+              </Button>
+            )}
         </div>
         {description && <CardDescription className="text-xs text-muted-foreground">{description}</CardDescription>}
       </CardHeader>
       <CardContent className={cn("flex-grow flex flex-col p-3 sm:p-4", fullHeightContent ? "justify-between" : "", contentClassName)}>
-        <div className={cn(fullHeightContent ? "flex-grow" : "")}>
+        <div className={cn(fullHeightContent && !href ? "flex-grow" : "")}> {/* Adjust flex-grow if no button needed */}
           {children}
         </div>
-        {href && ( // Always show button if href is provided
-          <Button asChild variant="outline" size="sm" className="mt-auto w-full group border-primary/50 hover:bg-primary/10 text-xs py-1.5 h-auto mt-2">
-            <Link href={href}>
-              Go to {title}
-              <ArrowRight className="ml-2 h-3 w-3 transition-transform group-hover:translate-x-1" />
-            </Link>
-          </Button>
-        )}
+        {/* Button is now part of header if href is provided */}
       </CardContent>
     </Card>
   );
-  // Link wrapping logic removed as button is now always inside CardContent if href exists
   return content;
 }
 
@@ -72,6 +74,8 @@ function HomePageContent() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         <DashboardWidget
           title="Daily Tasks"
+          href="/todo" // Link to full To-Do page
+          icon={CheckSquare}
           borderColor="border-primary"
           className="lg:col-span-1 md:row-span-2"
           contentClassName="p-0"
@@ -79,7 +83,7 @@ function HomePageContent() {
         >
           <TodoListComponent 
             showTitle={false} 
-            maxHeight="max-h-[280px] sm:max-h-[320px] md:max-h-[calc(100%-4rem)]" // Adjusted for button
+            maxHeight="max-h-[280px] sm:max-h-[320px] md:max-h-[calc(100%-2rem)]" 
             enableAdding={true} 
           />
         </DashboardWidget>
@@ -105,7 +109,7 @@ function HomePageContent() {
           className="lg:col-span-1 min-h-[150px] md:min-h-full"
           fullHeightContent={true}
         >
-           <HabitWidgetDisplay /> {/* Display habit list here */}
+           <HabitWidgetDisplay /> 
         </DashboardWidget>
 
         <DashboardWidget
@@ -129,14 +133,14 @@ function HomePageContent() {
           className="lg:col-span-1 min-h-[150px] md:min-h-full"
           contentClassName="p-1"
           fullHeightContent={true}
-          href="/calendar" // Add href here to show "View Full Calendar" button
+          href="/calendar"
         >
           <UpcomingEventsWidget maxEvents={3} />
         </DashboardWidget>
 
          <DashboardWidget
           title="Focus Tools"
-          description="Pomodoro & Meditation."
+          description="Pomodoro &amp; Meditation."
           icon={Sparkles}
           borderColor="border-yellow-500"
           className="lg:col-span-1 md:col-span-2 lg:col-span-3 min-h-[150px] md:min-h-full"

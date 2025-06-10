@@ -9,15 +9,16 @@ import { useAutosave } from '@/hooks/useAutosave';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertTriangle, Save } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { format, isValid } from 'date-fns'; // Ensure format and isValid are imported
+import { format, isValid } from 'date-fns';
+import { Timestamp } from 'firebase/firestore';
 
 interface JournalEditorProps {
   initialEntryData?: Partial<JournalEntry>;
   onSave: (content: string, entryId?: string) => Promise<string | undefined | void>;
   onClose: () => void;
   isOpen: boolean;
-  isSavingJournal: boolean; // This prop comes from useJournalEntry (the hook managing single entry save/delete)
-  journalError?: string | null; // Error from useJournalEntry
+  isSavingJournal: boolean;
+  journalError?: string | null;
 }
 
 export default function JournalEditor({
@@ -25,7 +26,7 @@ export default function JournalEditor({
   onSave,
   onClose,
   isOpen,
-  isSavingJournal, // This is the isSaving state from the hook
+  isSavingJournal,
   journalError,
 }: JournalEditorProps) {
   const [content, setContent] = useState<string>('');
@@ -33,39 +34,35 @@ export default function JournalEditor({
   const [isLoadingInitial, setIsLoadingInitial] = useState<boolean>(true);
   const [currentEntryId, setCurrentEntryId] = useState<string | undefined>(undefined);
 
-
   useEffect(() => {
     if (isOpen) {
       setIsLoadingInitial(true);
       const entryContent = initialEntryData?.content || '';
       const entryId = initialEntryData?.id;
+      
       setContent(entryContent);
       setCurrentEntryId(entryId);
-      setIsDirty(false); // Reset dirty state when dialog opens/initial data changes
+      setIsDirty(false); 
       setIsLoadingInitial(false);
     } else {
-      // Reset when dialog is closed
       setContent('');
       setCurrentEntryId(undefined);
       setIsDirty(false);
-      setIsLoadingInitial(true);
+      setIsLoadingInitial(true); 
     }
   }, [initialEntryData, isOpen]);
 
   const handleInternalSave = useCallback(async (currentContent: string) => {
-    // Only save if dirty or if it's a new entry (no currentEntryId yet)
     if (!isDirty && currentEntryId) return; 
     
     const savedId = await onSave(currentContent, currentEntryId);
     
     if (savedId) {
       setIsDirty(false);
-      if (!currentEntryId) { // If it was a new entry that just got an ID
-        setCurrentEntryId(savedId); // Update currentEntryId for subsequent autosaves
+      if (!currentEntryId) { 
+        setCurrentEntryId(savedId);
       }
-      // No need to manually refetch here, parent list's onSnapshot should update.
     }
-    // Error handling is managed by the parent via journalError prop
   }, [onSave, currentEntryId, isDirty]);
 
   useAutosave<string>({
@@ -95,7 +92,6 @@ export default function JournalEditor({
         </div>
       );
     }
-    // JournalError is passed from the parent hook, reflecting save/delete issues
     if (journalError && !isLoadingInitial) { 
       return (
         <div className="p-4 sm:p-6 text-center text-destructive-foreground bg-destructive/80 rounded-b-xl h-[400px] md:h-[500px] flex flex-col justify-center items-center">
@@ -112,34 +108,37 @@ export default function JournalEditor({
         placeholder="What's on your mind? Your progress, your struggles, your wins... Type it all out."
         className="w-full h-[350px] sm:h-[400px] md:h-[450px] p-4 text-sm sm:text-base border-0 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none bg-background text-foreground"
         aria-label="Journal Entry"
-        disabled={isSavingJournal || !!journalError}
+        disabled={isSavingJournal || !!journalError || isLoadingInitial}
       />
     );
   };
 
-  let lastUpdatedDate: Date | null = null;
+  let displayableLastUpdated: Date | null = null;
   if (initialEntryData?.lastUpdated) {
-      if (initialEntryData.lastUpdated instanceof Date && isValid(initialEntryData.lastUpdated)) {
-          lastUpdatedDate = initialEntryData.lastUpdated;
-      } else if (typeof (initialEntryData.lastUpdated as any)?.toDate === 'function') {
-          const convertedDate = (initialEntryData.lastUpdated as any).toDate();
-          if (isValid(convertedDate)) {
-              lastUpdatedDate = convertedDate;
-          }
-      }
+    if (initialEntryData.lastUpdated instanceof Date && isValid(initialEntryData.lastUpdated)) {
+      displayableLastUpdated = initialEntryData.lastUpdated;
+    } else if (initialEntryData.lastUpdated instanceof Timestamp && isValid(initialEntryData.lastUpdated.toDate())) {
+      displayableLastUpdated = initialEntryData.lastUpdated.toDate();
+    } else if (typeof (initialEntryData.lastUpdated as any)?.toDate === 'function') { // Handle cases where it might be a plain object
+        const convertedDate = (initialEntryData.lastUpdated as any).toDate();
+        if (isValid(convertedDate)) {
+            displayableLastUpdated = convertedDate;
+        }
+    }
   }
+
 
   return (
     <Dialog open={isOpen} onOpenChange={(openState) => !openState && onClose()}>
       <DialogContent className="sm:max-w-2xl w-[90vw] h-[80vh] flex flex-col p-0">
         <DialogHeader className="p-4 border-b">
           <DialogTitle>{currentEntryId ? 'Edit Entry' : 'New Journal Entry'}</DialogTitle>
-          {lastUpdatedDate && (
+          {displayableLastUpdated && (
             <DialogDescription className="text-xs">
-              Last saved: {format(lastUpdatedDate, 'Pp')}
+              Last saved: {format(displayableLastUpdated, 'Pp')}
             </DialogDescription>
           )}
-           {!lastUpdatedDate && currentEntryId && ( // If existing entry but no valid lastUpdated
+           {!displayableLastUpdated && currentEntryId && (
              <DialogDescription className="text-xs text-muted-foreground">
                 Not saved yet.
              </DialogDescription>

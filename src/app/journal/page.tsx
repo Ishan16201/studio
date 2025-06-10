@@ -11,18 +11,18 @@ import { useJournalEntry } from '@/hooks/useJournalEntry';
 import JournalEntryCard from '@/components/journal/JournalEntryCard';
 import JournalEditor from '@/components/journal/JournalEditor';
 import type { JournalEntry } from '@/types';
-import { format } from 'date-fns';
+import { format, isValid } from 'date-fns';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 
 function JournalPageContent() {
   const { entries, isLoading: isLoadingList, error: listError, refetch: refetchList } = useJournalList();
-  const { saveJournalEntry, deleteJournalEntry, isSaving: isSavingEntryHook, error: entryErrorHook } = useJournalEntry(); // Hook for save/delete actions
+  const { saveJournalEntry, deleteJournalEntry, isSaving: isSavingEntryHook, error: entryErrorHook } = useJournalEntry();
 
   const [showEditor, setShowEditor] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Partial<JournalEntry> | null>(null);
 
   const handleNewEntry = () => {
-    setEditingEntry({}); // Empty object indicates a new entry
+    setEditingEntry({}); 
     setShowEditor(true);
   };
 
@@ -34,14 +34,12 @@ function JournalPageContent() {
   const handleCloseEditor = useCallback(() => {
     setShowEditor(false);
     setEditingEntry(null);
-    refetchList(); // Refetch list in case of changes
+    refetchList(); 
   }, [refetchList]);
 
   const handleSaveEntryInPage = useCallback(async (content: string, entryId?: string) => {
-    // Determine if it's an update or new entry based on entryId or editingEntry state
     const currentFullEntryForSave = entryId ? entries.find(e => e.id === entryId) : null;
     
-    // Pass the existing `createdAt` if it's an update, otherwise it will be set by serverTimestamp
     const entryDataForSave: Partial<JournalEntry> = {
         id: entryId,
         content: content,
@@ -50,31 +48,42 @@ function JournalPageContent() {
     
     const savedId = await saveJournalEntry(content, entryDataForSave);
     if (savedId) {
-      if (!entryId) { // It was a new entry
-         // The editor might stay open for further edits to this new entry.
-         // Update editingEntry to include the new ID and potentially new timestamps from server.
-         // Or, simply close and refetch. For now, we rely on onClose triggering refetch.
-      }
-      // handleCloseEditor(); // Close editor on successful save if desired, or let user close manually.
-      // RefetchList is called in handleCloseEditor
+       // Optionally update editingEntry if it was a new entry and editor remains open
+       if (!entryId && editingEntry && Object.keys(editingEntry).length === 0) {
+           setEditingEntry(prev => ({...prev, id: savedId, content, createdAt: new Date(), lastUpdated: new Date() }));
+       }
+       // If autosaving an existing entry, and editor remains open, its internal 'initialEntryData' might need an update
+       // For simplicity, closing often handles this by forcing a fresh load if re-opened.
+       // However, if editor remains open, and an autosave happens, the `lastUpdated` time in header won't update
+       // until `initialEntryData` prop itself changes. This might need a more sophisticated state sync.
     }
-    // Error handling is managed by entryErrorHook and displayed in JournalEditor
     return savedId;
-  }, [saveJournalEntry, entries]);
+  }, [saveJournalEntry, entries, editingEntry]);
 
   const handleDeleteEntryInPage = async (entryId: string) => {
     if (window.confirm('Are you sure you want to delete this entry?')) {
       const success = await deleteJournalEntry(entryId);
       if (success) {
         refetchList();
-        if (editingEntry?.id === entryId) { // If deleting the entry currently in editor
+        if (editingEntry?.id === entryId) { 
           handleCloseEditor();
         }
       }
     }
   };
   
-  const latestEntryDate = entries.length > 0 && entries[0].createdAt ? (entries[0].createdAt instanceof Date ? entries[0].createdAt : entries[0].createdAt.toDate()) : null;
+  let latestEntryDate: Date | null = null;
+  if (entries.length > 0 && entries[0].createdAt) {
+      if (entries[0].createdAt instanceof Date && isValid(entries[0].createdAt)) {
+          latestEntryDate = entries[0].createdAt;
+      } else if (typeof (entries[0].createdAt as any)?.toDate === 'function') {
+          const convertedDate = (entries[0].createdAt as any).toDate();
+          if (isValid(convertedDate)) {
+              latestEntryDate = convertedDate;
+          }
+      }
+  }
+
 
   return (
     <div className="container mx-auto max-w-5xl p-4 md:p-8">
@@ -122,7 +131,7 @@ function JournalPageContent() {
                   key={entry.id} 
                   entry={entry} 
                   onEdit={() => handleEditEntry(entry)} 
-                  onDelete={() => entry.id && handleDeleteEntryInPage(entry.id)} 
+                  onDelete={() => handleDeleteEntryInPage(entry.id)} 
                 />
               ))}
             </div>
@@ -133,7 +142,7 @@ function JournalPageContent() {
       {showEditor && (
         <JournalEditor
           isOpen={showEditor}
-          initialEntryData={editingEntry || {}} // Pass empty object for new, or existing entry
+          initialEntryData={editingEntry || {}}
           onSave={handleSaveEntryInPage}
           onClose={handleCloseEditor}
           isSavingJournal={isSavingEntryHook}
@@ -141,7 +150,7 @@ function JournalPageContent() {
         />
       )}
        <p className="text-center text-sm text-muted-foreground mt-8">
-        Reflect and grow. All entries are autosaved.
+        Reflect and grow. Entries are autosaved.
       </p>
     </div>
   );

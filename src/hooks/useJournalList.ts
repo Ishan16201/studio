@@ -38,15 +38,24 @@ export function useJournalList() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedEntries = snapshot.docs.map(docSnap => {
         const data = docSnap.data();
-        // Ensure createdAt and lastUpdated are Date objects
-        // Fallback to current date or epoch if timestamp is somehow invalid/missing,
-        // though serverTimestamp() should prevent this for new data.
-        const createdAtDate = data.createdAt instanceof Timestamp 
-                              ? data.createdAt.toDate() 
-                              : (data.createdAt ? new Date(data.createdAt) : new Date(0)); // Jan 1 1970 if truly missing
-        const lastUpdatedDate = data.lastUpdated instanceof Timestamp 
-                                ? data.lastUpdated.toDate() 
-                                : (data.lastUpdated ? new Date(data.lastUpdated) : new Date(0));
+        
+        let createdAtDate: Date;
+        if (data.createdAt instanceof Timestamp) {
+            createdAtDate = data.createdAt.toDate();
+        } else if (data.createdAt && typeof data.createdAt.seconds === 'number') { // Handle plain JS object with seconds/nanos
+            createdAtDate = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds).toDate();
+        } else {
+            createdAtDate = new Date(data.createdAt || 0); // Fallback
+        }
+
+        let lastUpdatedDate: Date | undefined = undefined;
+        if (data.lastUpdated instanceof Timestamp) {
+            lastUpdatedDate = data.lastUpdated.toDate();
+        } else if (data.lastUpdated && typeof data.lastUpdated.seconds === 'number') {
+            lastUpdatedDate = new Timestamp(data.lastUpdated.seconds, data.lastUpdated.nanoseconds).toDate();
+        } else if (data.lastUpdated) {
+            lastUpdatedDate = new Date(data.lastUpdated);
+        }
 
         return {
           id: docSnap.id,
@@ -71,11 +80,15 @@ export function useJournalList() {
     });
 
     return unsubscribe;
-  }, [toast, fbConfigError]); // Removed firebaseInitialized, db from deps as they are checked inside
+  }, [toast, fbConfigError]);
 
   useEffect(() => {
     const unsubscribe = fetchJournalEntries();
-    return () => unsubscribe?.();
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, [fetchJournalEntries]);
 
   const finalError = !firebaseInitialized ? (fbConfigError || "Firebase configuration error.") : error;

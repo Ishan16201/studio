@@ -4,7 +4,7 @@ import type { Timestamp } from 'firebase/firestore';
 export interface Habit {
   id: string; // Firestore document ID for the habit definition
   name: string;
-  createdAt?: Timestamp; // When the habit definition was created
+  createdAt: Timestamp | Date; // Firestore Timestamp or Date
   userId?: string;
 }
 
@@ -14,10 +14,10 @@ export interface DailyHabits {
 }
 
 export interface JournalEntry {
-  id?: string; // Firestore document ID, optional for new entries
+  id: string; // Firestore document ID
   content: string;
   createdAt: Timestamp | Date; // Firestore Timestamp for creation, Date when working in client
-  lastUpdated: Timestamp | Date; // Firestore Timestamp for last update, Date when working in client
+  lastUpdated?: Timestamp | Date; // Firestore Timestamp for last update, Date when working in client
   userId?: string;
 }
 
@@ -37,7 +37,7 @@ export interface TodoItem {
   text: string;
   completed: boolean;
   priority: TaskPriority;
-  createdAt: Timestamp; // Always Firestore Timestamp when fetched/saved
+  createdAt: Timestamp | Date; // Firestore Timestamp or Date
   userId?: string; // To associate tasks with a user
 }
 
