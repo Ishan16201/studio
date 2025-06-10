@@ -2,9 +2,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertTriangle, CalendarDays, Dot } from 'lucide-react';
+import { AlertTriangle, Dot } from 'lucide-react';
 import type { CalendarEvent } from '@/types';
 import { db, USER_ID, firebaseInitialized, firebaseInitError } from '@/lib/firebase';
 import { collection, query, where, orderBy, limit, onSnapshot, Timestamp } from 'firebase/firestore';
@@ -48,11 +47,17 @@ export default function UpcomingEventsWidget({ maxEvents = 3 }: UpcomingEventsWi
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedEvents = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(),
-      })) as CalendarEvent[];
+      const fetchedEvents = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          title: data.title,
+          description: data.description,
+          date: data.date,
+          userId: data.userId,
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
+        } as CalendarEvent;
+      });
       setUpcomingEvents(fetchedEvents);
       setIsLoading(false);
     }, (err) => {
@@ -64,7 +69,7 @@ export default function UpcomingEventsWidget({ maxEvents = 3 }: UpcomingEventsWi
     return () => unsubscribe();
   }, [maxEvents]);
 
-  if (!firebaseInitialized || error && !upcomingEvents.length) { // Show error prominently if initial load fails
+  if (!firebaseInitialized && (error || firebaseInitError)) { 
      return (
       <div className="p-4 text-center text-xs">
         <AlertTriangle className="mx-auto h-6 w-6 text-destructive mb-1" />
@@ -83,7 +88,7 @@ export default function UpcomingEventsWidget({ maxEvents = 3 }: UpcomingEventsWi
     );
   }
 
-  if (upcomingEvents.length === 0) {
+  if (upcomingEvents.length === 0 && !error) { // Don't show "no events" if there was an error
     return (
       <p className="text-sm text-muted-foreground text-center p-4">
         No upcoming events in the near future.

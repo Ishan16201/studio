@@ -35,11 +35,11 @@ const MonthGrid: React.FC<MonthGridProps> = ({ month, dailyLogs, habitName, onTo
   const monthName = format(month, 'MMM');
 
   return (
-    <div className="flex flex-col items-center p-1 min-w-[120px] flex-shrink-0"> {/* Ensure min-width for month */}
+    <div className="flex flex-col items-center p-1 min-w-[100px] flex-shrink-0"> {/* Adjusted min-width */}
       <div className="text-xs text-muted-foreground mb-1 font-medium">{monthName}</div>
-      <div className="grid grid-cols-7 gap-px sm:gap-0.5">
+      <div className="grid grid-cols-7 gap-px"> {/* Reduced gap */}
         {Array.from({ length: firstDayOfMonth }).map((_, i) => (
-          <div key={`blank-${i}`} className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+          <div key={`blank-${i}`} className="w-3 h-3" /> // Adjusted size
         ))}
         {daysInMonth.map((day) => {
           const dayLog = dailyLogs.find(d => d.date === format(day, 'yyyy-MM-dd'));
@@ -54,7 +54,7 @@ const MonthGrid: React.FC<MonthGridProps> = ({ month, dailyLogs, habitName, onTo
                     onClick={() => onTogglePastHabit(day, habitName, isCompleted || false)}
                     aria-label={`Toggle ${habitName} for ${format(day, 'MMMM d, yyyy')}. Status: ${isCompleted ? 'Completed' : isCompleted === false ? 'Not Completed' : 'Not Tracked'}`}
                     className={cn(
-                      "w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-sm transition-all duration-150 ease-in-out focus:outline-none",
+                      "w-3 h-3 rounded-sm transition-all duration-150 ease-in-out focus:outline-none", // Adjusted size
                       colorClass
                     )}
                   />
@@ -119,8 +119,8 @@ export default function HabitActivityCalendar({ habit, allDailyLogsForYear, curr
         </CardTitle>
         <CardDescription>Daily completion consistency for this habit.</CardDescription>
       </CardHeader>
-      <CardContent className="p-1 sm:p-2 overflow-x-auto"> {/* Allow horizontal scroll if needed for overall card */}
-        <div className="flex flex-row flex-wrap justify-start items-start gap-1 sm:gap-2"> {/* Flex wrap for months */}
+      <CardContent className="p-1 sm:p-2">
+        <div className="flex flex-row flex-wrap justify-start items-start gap-0.5 sm:gap-1"> {/* flex-wrap for months */}
            {monthsToDisplay.map(month => (
             <MonthGrid
                 key={format(month, 'yyyy-MM')}

@@ -7,15 +7,16 @@ import { Button } from '@/components/ui/button';
 import { PlusCircle, BookOpen, AlertTriangle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useJournalList } from '@/hooks/useJournalList';
-import { useJournalEntry } from '@/hooks/useJournalEntry'; // For save/delete logic
+import { useJournalEntry } from '@/hooks/useJournalEntry';
 import JournalEntryCard from '@/components/journal/JournalEntryCard';
 import JournalEditor from '@/components/journal/JournalEditor';
 import type { JournalEntry } from '@/types';
 import { format } from 'date-fns';
+import ProtectedRoute from '@/components/auth/ProtectedRoute';
 
-export default function JournalPage() {
+function JournalPageContent() {
   const { entries, isLoading: isLoadingList, error: listError, refetch: refetchList } = useJournalList();
-  const { saveJournalEntry, deleteJournalEntry, isSaving: isSavingEntry, error: entryError } = useJournalEntry(null); // For save/delete actions
+  const { saveJournalEntry, deleteJournalEntry, isSaving: isSavingEntryHook, error: entryErrorHook } = useJournalEntry(); // Hook for save/delete actions
 
   const [showEditor, setShowEditor] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Partial<JournalEntry> | null>(null);
@@ -30,50 +31,50 @@ export default function JournalPage() {
     setShowEditor(true);
   };
 
-  const handleCloseEditor = () => {
+  const handleCloseEditor = useCallback(() => {
     setShowEditor(false);
     setEditingEntry(null);
     refetchList(); // Refetch list in case of changes
-  };
+  }, [refetchList]);
 
-  const handleSaveEntryInPage = async (content: string, entryId?: string) => {
-    const entryToSave: Partial<JournalEntry> = {
+  const handleSaveEntryInPage = useCallback(async (content: string, entryId?: string) => {
+    // Determine if it's an update or new entry based on entryId or editingEntry state
+    const currentFullEntryForSave = entryId ? entries.find(e => e.id === entryId) : null;
+    
+    // Pass the existing `createdAt` if it's an update, otherwise it will be set by serverTimestamp
+    const entryDataForSave: Partial<JournalEntry> = {
         id: entryId,
         content: content,
-        // createdAt and lastUpdated will be handled by saveJournalEntry hook
+        ...(currentFullEntryForSave && { createdAt: currentFullEntryForSave.createdAt })
     };
-    // The saveJournalEntry hook needs the *full* entry if it's an update, to preserve createdAt.
-    // Or, it needs to be smart enough. Let's adapt its usage.
-    // The hook 'useJournalEntry(null)' is only for accessing save/delete, not for loading specific entry data for editor.
     
-    // If editingEntry has an ID, it's an update. If not, it's new.
-    const currentFullEntry = entryId ? entries.find(e => e.id === entryId) : null;
-    const effectiveEntryForSave: JournalEntry | null = currentFullEntry ? 
-        {...currentFullEntry, content } : 
-        { content, createdAt: new Date(), lastUpdated: new Date(), userId: 'defaultUser' };
-
-
-    const savedId = await saveJournalEntry(content, effectiveEntryForSave);
+    const savedId = await saveJournalEntry(content, entryDataForSave);
     if (savedId) {
-      // Optionally, if editor stays open for a new entry, update `editingEntry` with the new ID
-      if (!entryId && typeof savedId === 'string') {
-        setEditingEntry(prev => prev ? {...prev, id: savedId} : {id: savedId, content});
+      if (!entryId) { // It was a new entry
+         // The editor might stay open for further edits to this new entry.
+         // Update editingEntry to include the new ID and potentially new timestamps from server.
+         // Or, simply close and refetch. For now, we rely on onClose triggering refetch.
       }
-      // Editor will typically close via onClose, triggering refetch.
+      // handleCloseEditor(); // Close editor on successful save if desired, or let user close manually.
+      // RefetchList is called in handleCloseEditor
     }
-    // Error handling is within useJournalEntry and displayed in editor.
-  };
+    // Error handling is managed by entryErrorHook and displayed in JournalEditor
+    return savedId;
+  }, [saveJournalEntry, entries]);
 
   const handleDeleteEntryInPage = async (entryId: string) => {
     if (window.confirm('Are you sure you want to delete this entry?')) {
       const success = await deleteJournalEntry(entryId);
       if (success) {
         refetchList();
+        if (editingEntry?.id === entryId) { // If deleting the entry currently in editor
+          handleCloseEditor();
+        }
       }
     }
   };
   
-  const latestEntryDate = entries.length > 0 ? entries[0].createdAt : null;
+  const latestEntryDate = entries.length > 0 && entries[0].createdAt ? (entries[0].createdAt instanceof Date ? entries[0].createdAt : entries[0].createdAt.toDate()) : null;
 
   return (
     <div className="container mx-auto max-w-5xl p-4 md:p-8">
@@ -120,7 +121,7 @@ export default function JournalPage() {
                 <JournalEntryCard 
                   key={entry.id} 
                   entry={entry} 
-                  onEdit={handleEditEntry} 
+                  onEdit={() => handleEditEntry(entry)} 
                   onDelete={() => entry.id && handleDeleteEntryInPage(entry.id)} 
                 />
               ))}
@@ -135,13 +136,21 @@ export default function JournalPage() {
           initialEntryData={editingEntry || {}} // Pass empty object for new, or existing entry
           onSave={handleSaveEntryInPage}
           onClose={handleCloseEditor}
-          isSavingJournal={isSavingEntry}
-          journalError={entryError}
+          isSavingJournal={isSavingEntryHook}
+          journalError={entryErrorHook}
         />
       )}
        <p className="text-center text-sm text-muted-foreground mt-8">
-        All entries are autosaved. Reflect and grow.
+        Reflect and grow. All entries are autosaved.
       </p>
     </div>
+  );
+}
+
+export default function JournalPage() {
+  return (
+    <ProtectedRoute>
+      <JournalPageContent />
+    </ProtectedRoute>
   );
 }

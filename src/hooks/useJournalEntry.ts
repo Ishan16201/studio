@@ -1,75 +1,61 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { db, USER_ID, firebaseInitialized, firebaseInitError as fbConfigError } from '@/lib/firebase';
-import { doc, getDoc, DocumentSnapshot, Timestamp, setDoc, addDoc, collection, serverTimestamp, deleteDoc } from 'firebase/firestore';
+import { doc, Timestamp, setDoc, addDoc, collection, serverTimestamp, deleteDoc, getDoc, DocumentSnapshot } from 'firebase/firestore';
 import type { JournalEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
 const getJournalEntryDocPath = (entryId: string) => `userJournalEntries/${USER_ID}/entries/${entryId}`;
 const userJournalEntriesCollectionPath = `userJournalEntries/${USER_ID}/entries`;
 
-export function useJournalEntry(entryId?: string | null) {
-  const [entry, setEntry] = useState<JournalEntry | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(!!entryId); // Only load if entryId is provided
+export function useJournalEntry(entryId?: string | null) { // entryId is for fetching a specific entry for editing
+  const [entry, setEntry] = useState<Partial<JournalEntry> | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-
-  const fetchJournal = useCallback(async (idToFetch: string) => {
+  
+  const fetchSpecificEntry = useCallback(async (idToFetch: string) => {
     setIsLoading(true);
     setError(null);
-
     if (!firebaseInitialized || !db) {
-      setError(fbConfigError || "Firebase is not initialized. Cannot fetch journal entry.");
+      setError(fbConfigError || "Firebase not initialized.");
       setIsLoading(false);
-      setEntry(null);
-      return;
+      return null;
     }
-
     try {
       const docRef = doc(db, getJournalEntryDocPath(idToFetch));
       const docSnap: DocumentSnapshot = await getDoc(docRef);
-
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setEntry({
+        const fetchedEntryData = {
           id: docSnap.id,
           content: data.content || '',
           createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
           lastUpdated: data.lastUpdated instanceof Timestamp ? data.lastUpdated.toDate() : new Date(data.lastUpdated),
-          userId: USER_ID
-        });
+          userId: data.userId || USER_ID,
+        };
+        setEntry(fetchedEntryData); // Update local state for editor
+        setIsLoading(false);
+        return fetchedEntryData;
       } else {
         setError("Journal entry not found.");
-        setEntry(null);
+        setIsLoading(false);
+        return null;
       }
     } catch (err: any) {
-      console.error('Error fetching journal entry:', err);
-      setError(`Could not load journal entry: ${err.message}`);
-      toast({
-        title: 'Error',
-        description: 'Could not load the journal entry.',
-        variant: 'destructive',
-      });
-      setEntry(null);
-    } finally {
+      console.error('Error fetching specific journal entry:', err);
+      setError(`Error: ${err.message}`);
+      toast({ title: 'Error', description: 'Could not load entry.', variant: 'destructive' });
       setIsLoading(false);
+      return null;
     }
-  }, [toast, firebaseInitialized, db, fbConfigError]);
+  }, [toast, fbConfigError]);
 
-  useEffect(() => {
-    if (entryId) {
-      fetchJournal(entryId);
-    } else {
-      // If no entryId, it's for a new entry, so initialize with defaults or empty
-      setEntry({ content: '', createdAt: new Date(), lastUpdated: new Date(), userId: USER_ID });
-      setIsLoading(false);
-    }
-  }, [entryId, fetchJournal]);
 
-  const saveJournalEntry = useCallback(async (contentToSave: string, currentEntry: JournalEntry | null): Promise<string | undefined> => {
+  const saveJournalEntry = useCallback(async (contentToSave: string, currentEntryData?: Partial<JournalEntry>): Promise<string | undefined> => {
     if (!firebaseInitialized || !db) {
       toast({ title: 'Error', description: 'Cannot save: Firebase not configured.', variant: 'destructive' });
       setError(fbConfigError || "Firebase not configured.");
@@ -78,21 +64,44 @@ export function useJournalEntry(entryId?: string | null) {
     setIsSaving(true);
     setError(null);
 
-    const now = serverTimestamp();
-    const entryData = {
-      content: contentToSave,
-      userId: USER_ID,
-      lastUpdated: now,
-    };
+    const now = serverTimestamp(); // For Firestore server-side timestamp
+    let entryToPersist: Omit<JournalEntry, 'id'> & { id?: string };
 
+    if (currentEntryData?.id) { // Existing entry
+      entryToPersist = {
+        id: currentEntryData.id,
+        content: contentToSave,
+        userId: USER_ID,
+        createdAt: currentEntryData.createdAt instanceof Date ? Timestamp.fromDate(currentEntryData.createdAt) : currentEntryData.createdAt as Timestamp, // Preserve original createdAt
+        lastUpdated: now,
+      };
+    } else { // New entry
+      entryToPersist = {
+        content: contentToSave,
+        userId: USER_ID,
+        createdAt: now,
+        lastUpdated: now,
+      };
+    }
+    
     try {
-      if (currentEntry?.id) { // Existing entry
-        const docRef = doc(db, getJournalEntryDocPath(currentEntry.id));
-        await setDoc(docRef, { ...entryData, createdAt: currentEntry.createdAt instanceof Date ? Timestamp.fromDate(currentEntry.createdAt) : currentEntry.createdAt }, { merge: true });
+      if (entryToPersist.id) {
+        const docRef = doc(db, getJournalEntryDocPath(entryToPersist.id));
+        await setDoc(docRef, { 
+            content: entryToPersist.content, 
+            userId: entryToPersist.userId, 
+            createdAt: entryToPersist.createdAt, // Ensure it's a Timestamp
+            lastUpdated: entryToPersist.lastUpdated 
+        }, { merge: true });
         toast({ title: 'Journal Updated', description: 'Your entry has been saved.' });
-        return currentEntry.id;
-      } else { // New entry
-        const docRef = await addDoc(collection(db, userJournalEntriesCollectionPath), { ...entryData, createdAt: now });
+        return entryToPersist.id;
+      } else {
+        const docRef = await addDoc(collection(db, userJournalEntriesCollectionPath), {
+            content: entryToPersist.content,
+            userId: entryToPersist.userId,
+            createdAt: entryToPersist.createdAt, // This will be a serverTimestamp
+            lastUpdated: entryToPersist.lastUpdated, // This will be a serverTimestamp
+        });
         toast({ title: 'Journal Entry Saved', description: 'Your new entry has been created.' });
         return docRef.id; // Return the new document ID
       }
@@ -104,14 +113,14 @@ export function useJournalEntry(entryId?: string | null) {
     } finally {
       setIsSaving(false);
     }
-  }, [toast, firebaseInitialized, db, fbConfigError]);
+  }, [toast, fbConfigError]);
   
   const deleteJournalEntry = useCallback(async (idToDelete: string): Promise<boolean> => {
     if (!firebaseInitialized || !db) {
       toast({ title: 'Error', description: 'Cannot delete: Firebase not configured.', variant: 'destructive' });
       return false;
     }
-    setIsSaving(true); // Use isSaving to indicate an operation is in progress
+    setIsSaving(true); // Indicate an operation is in progress
     try {
       const docRef = doc(db, getJournalEntryDocPath(idToDelete));
       await deleteDoc(docRef);
@@ -124,11 +133,9 @@ export function useJournalEntry(entryId?: string | null) {
     } finally {
       setIsSaving(false);
     }
-  }, [toast, firebaseInitialized, db]);
-
+  }, [toast, fbConfigError]);
 
   const finalError = !firebaseInitialized ? (fbConfigError || "Firebase configuration error.") : error;
 
-  return { entry, isLoading, isSaving, error: finalError, fetchJournal, saveJournalEntry, deleteJournalEntry };
+  return { entry, isLoading, isSaving, error: finalError, fetchSpecificEntry, saveJournalEntry, deleteJournalEntry };
 }
-

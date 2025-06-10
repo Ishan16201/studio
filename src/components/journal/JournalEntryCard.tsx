@@ -5,7 +5,7 @@ import type { JournalEntry } from '@/types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
-import { Edit3, Trash2, CalendarDays } from 'lucide-react';
+import { Edit3, Trash2 } from 'lucide-react';
 
 interface JournalEntryCardProps {
   entry: JournalEntry;
@@ -14,8 +14,7 @@ interface JournalEntryCardProps {
 }
 
 export default function JournalEntryCard({ entry, onEdit, onDelete }: JournalEntryCardProps) {
-  // Ensure lastUpdated is a Date object for formatting
-  const displayDate = entry.lastUpdated instanceof Date ? entry.lastUpdated : entry.lastUpdated.toDate();
+  const displayDate = entry.createdAt instanceof Date ? entry.createdAt : entry.createdAt.toDate();
   
   const contentSnippet = entry.content.substring(0, 150) + (entry.content.length > 150 ? '...' : '');
 

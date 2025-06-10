@@ -4,11 +4,10 @@
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, BookOpenText, History, Users, CalendarDays, CheckSquare, Sparkles } from 'lucide-react';
-import Image from 'next/image';
+import { ArrowRight, BookOpenText, History, CalendarDays, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
 import TodoListComponent from '@/components/todo/TodoListComponent';
-import UpcomingEventsWidget from '@/components/dashboard/UpcomingEventsWidget'; // Import new widget
+import UpcomingEventsWidget from '@/components/dashboard/UpcomingEventsWidget';
 import { cn } from '@/lib/utils';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext'; 
@@ -21,22 +20,22 @@ interface DashboardWidgetProps {
   children?: React.ReactNode;
   className?: string;
   borderColor?: string; 
-  contentClassName?: string; // For styling child content specifically
+  contentClassName?: string;
 }
 
 function DashboardWidget({ title, description, href, icon: Icon, children, className, borderColor, contentClassName }: DashboardWidgetProps) {
   const content = (
     <Card className={cn("shadow-lg rounded-xl overflow-hidden h-full flex flex-col bg-card text-card-foreground", borderColor ? `border-2 ${borderColor}` : '', className)}>
-      <CardHeader className="pb-3"> {/* Reduced padding bottom */}
+      <CardHeader className="pb-3">
         <div className="flex items-center mb-1">
           {Icon && <Icon className="w-5 h-5 mr-2 text-primary" />}
           <CardTitle className="text-lg font-semibold">{title}</CardTitle>
         </div>
         {description && <CardDescription className="text-xs text-muted-foreground">{description}</CardDescription>}
       </CardHeader>
-      <CardContent className={cn("flex-grow flex flex-col justify-between p-3 sm:p-4", contentClassName)}> {/* Reduced padding */}
+      <CardContent className={cn("flex-grow flex flex-col justify-between p-3 sm:p-4", contentClassName)}>
         {children}
-        {href && !children && ( // Render button only if href and no children explicitly passed to fill content
+        {href && !children && (
           <Button asChild variant="outline" size="sm" className="mt-auto w-full group border-primary/50 hover:bg-primary/10">
             <Link href={href}>
               Go to {title}
@@ -47,7 +46,6 @@ function DashboardWidget({ title, description, href, icon: Icon, children, class
       </CardContent>
     </Card>
   );
-  // If it's a simple link widget with no children, wrap the whole thing in a Link
   return href && !children ? <Link href={href} className="block h-full">{content}</Link> : content;
 }
 
@@ -71,11 +69,11 @@ function HomePageContent() {
           title="Daily Tasks"
           borderColor="border-primary"
           className="lg:col-span-1 md:row-span-2"
-          contentClassName="p-0" // Remove padding for TodoList
+          contentClassName="p-0"
         >
           <TodoListComponent 
             showTitle={false} 
-            maxHeight="max-h-[280px] sm:max-h-[320px] md:max-h-[calc(100%-2rem)]" // Adjusted for CardHeader
+            maxHeight="max-h-[280px] sm:max-h-[320px] md:max-h-[calc(100%-2rem)]"
             enableAdding={true} 
           />
         </DashboardWidget>
@@ -136,7 +134,7 @@ function HomePageContent() {
           icon={CalendarDays}
           borderColor="border-blue-500"
           className="lg:col-span-1 min-h-[150px] md:min-h-full"
-          contentClassName="p-1" // Reduced padding for event list
+          contentClassName="p-1"
         >
           <UpcomingEventsWidget maxEvents={3} />
            <Button asChild variant="ghost" size="sm" className="mt-auto w-full group text-primary hover:text-primary/80 justify-center text-xs">

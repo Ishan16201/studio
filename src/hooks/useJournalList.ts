@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { db, USER_ID, firebaseInitialized, firebaseInitError as fbConfigError } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, Timestamp } from 'firebase/firestore';
 import type { JournalEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
@@ -36,20 +36,24 @@ export function useJournalList() {
     const q = query(entriesColRef, orderBy('createdAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedEntries = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        // Ensure createdAt and lastUpdated are Date objects if they come from Firestore Timestamps
-        createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt),
-        lastUpdated: doc.data().lastUpdated instanceof Timestamp ? doc.data().lastUpdated.toDate() : new Date(doc.data().lastUpdated),
-      })) as JournalEntry[];
+      const fetchedEntries = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          content: data.content || '',
+          // Ensure createdAt and lastUpdated are Date objects if they come from Firestore Timestamps
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
+          lastUpdated: data.lastUpdated instanceof Timestamp ? data.lastUpdated.toDate() : new Date(data.lastUpdated),
+          userId: data.userId || USER_ID,
+        } as JournalEntry;
+      });
       setEntries(fetchedEntries);
       setIsLoading(false);
     }, (err: any) => {
       console.error('Error fetching journal entries:', err);
       setError(`Could not load journal entries: ${err.message}`);
       toast({
-        title: 'Error',
+        title: 'Error Loading Journal',
         description: 'Could not load your journal entries.',
         variant: 'destructive',
       });
@@ -58,7 +62,7 @@ export function useJournalList() {
     });
 
     return unsubscribe;
-  }, [toast, firebaseInitialized, db, fbConfigError]); // fbConfigError added
+  }, [toast, firebaseInitialized, db, fbConfigError]);
 
   useEffect(() => {
     const unsubscribe = fetchJournalEntries();

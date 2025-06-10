@@ -16,8 +16,8 @@ export interface DailyHabits {
 export interface JournalEntry {
   id?: string; // Firestore document ID, optional for new entries
   content: string;
-  createdAt: Timestamp; // Firestore Timestamp for creation
-  lastUpdated: Timestamp; // Firestore Timestamp for last update
+  createdAt: Timestamp | Date; // Firestore Timestamp for creation, Date when working in client
+  lastUpdated: Timestamp | Date; // Firestore Timestamp for last update, Date when working in client
   userId?: string;
 }
 
@@ -54,5 +54,5 @@ export interface CalendarEvent {
   description?: string;
   date: string; // YYYY-MM-DD format
   userId: string;
-  createdAt: Timestamp;
+  createdAt: Timestamp | Date; // Firestore Timestamp or Date
 }

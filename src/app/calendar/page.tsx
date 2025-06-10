@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { CalendarDays, Info, PlusCircle, AlertTriangle, List } from 'lucide-react';
+import { CalendarDays, List, PlusCircle, AlertTriangle } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -14,10 +14,11 @@ import { collection, addDoc, query, where, onSnapshot, deleteDoc, doc, serverTim
 import EventFormDialog from '@/components/calendar/EventFormDialog';
 import EventItem from '@/components/calendar/EventItem';
 import { Skeleton } from '@/components/ui/skeleton';
+import ProtectedRoute from '@/components/auth/ProtectedRoute';
 
 const userEventsCollectionPath = `userEvents/${USER_ID}/events`;
 
-export default function CalendarPage() {
+function CalendarPageContent() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [showEventForm, setShowEventForm] = useState(false);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -38,15 +39,21 @@ export default function CalendarPage() {
     const q = query(eventsColRef, 
                     where('date', '>=', format(monthStart, 'yyyy-MM-dd')), 
                     where('date', '<=', format(monthEnd, 'yyyy-MM-dd')),
-                    orderBy('date', 'asc') 
+                    orderBy('date', 'asc') // Order by date to ensure chronological display
                   );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedEvents = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt : Timestamp.now(), 
-      })) as CalendarEvent[];
+      const fetchedEvents = snapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          title: data.title,
+          description: data.description,
+          date: data.date,
+          userId: data.userId,
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date()),
+        } as CalendarEvent;
+      });
       setEvents(fetchedEvents);
       setIsLoadingEvents(false);
     }, (error) => {
@@ -55,19 +62,20 @@ export default function CalendarPage() {
       setIsLoadingEvents(false);
     });
     return unsubscribe;
-  }, [toast, firebaseInitialized, db]); // firebaseInitialized and db added as deps
+  }, [toast]); // firebaseInitialized and db are checked inside
 
   useEffect(() => {
     if (selectedDate && firebaseInitialized && db) { 
       const unsubscribe = fetchEventsForMonth(selectedDate);
-      return () => unsubscribe?.();
+      return () => unsubscribe?.(); // Call unsubscribe if it exists
     }
-  }, [selectedDate, fetchEventsForMonth, firebaseInitialized, db]); 
+  }, [selectedDate, fetchEventsForMonth]); 
 
   useEffect(() => {
     if (selectedDate) {
       const dateString = format(selectedDate, 'yyyy-MM-dd');
-      setSelectedDayEvents(events.filter(event => event.date === dateString));
+      // Filter events by comparing the date part only
+      setSelectedDayEvents(events.filter(event => format(parseISO(event.date), 'yyyy-MM-dd') === dateString));
     } else {
       setSelectedDayEvents([]);
     }
@@ -80,23 +88,16 @@ export default function CalendarPage() {
       return;
     }
     try {
-      // Optimistic UI update can be added here if desired, though onSnapshot will handle it
-      // For example:
-      // const tempId = Math.random().toString(36).substring(2);
-      // const newEventOptimistic = { ...eventData, id: tempId, userId: USER_ID, createdAt: Timestamp.now() };
-      // setEvents(prev => [...prev, newEventOptimistic].sort((a,b) => a.date.localeCompare(b.date)));
-
       await addDoc(collection(db, userEventsCollectionPath), {
         ...eventData, 
         userId: USER_ID,
-        createdAt: serverTimestamp(),
+        createdAt: serverTimestamp(), // Use server timestamp
       });
       toast({ title: "Event Added", description: `"${eventData.title}" has been added.` });
-      // onSnapshot will update the list, no explicit fetchEventsForMonth needed here
+      // onSnapshot will update the list, no explicit refetch needed here
     } catch (error) {
       console.error("Error adding event:", error);
       toast({ title: "Error", description: "Could not save the event.", variant: "destructive" });
-      // Revert optimistic update if implemented
     }
   };
 
@@ -105,9 +106,6 @@ export default function CalendarPage() {
       toast({ title: "Error", description: "Firebase not configured. Cannot delete event.", variant: "destructive" });
       return;
     }
-    // Optimistic UI update
-    // const eventsBeforeDelete = [...events];
-    // setEvents(prev => prev.filter(event => event.id !== eventId));
     try {
       await deleteDoc(doc(db, userEventsCollectionPath, eventId));
       toast({ title: "Event Deleted", description: "The event has been removed." });
@@ -115,11 +113,12 @@ export default function CalendarPage() {
     } catch (error) {
       console.error("Error deleting event:", error);
       toast({ title: "Error", description: "Could not delete the event.", variant: "destructive" });
-      // setEvents(eventsBeforeDelete); // Revert optimistic update
     }
   };
   
-  const daysWithEventsModifier = events.map(event => parseISO(event.date));
+  const daysWithEventsModifier = events
+    .map(event => parseISO(event.date))
+    .filter(date => !isNaN(date.valueOf())); // Filter out invalid dates
 
   if (!firebaseInitialized) {
     return (
@@ -132,7 +131,7 @@ export default function CalendarPage() {
             <CardTitle className="text-2xl sm:text-3xl font-bold">Configuration Error</CardTitle>
           </CardHeader>
           <CardContent className="p-6 text-center">
-            <p className="text-lg text-destructive-foreground">{fbConfigError || "Firebase is not configured correctly. Calendar features might be unavailable."}</p>
+            <p className="text-lg text-foreground">{fbConfigError || "Firebase is not configured correctly. Calendar features might be unavailable."}</p>
             <p className="text-sm text-muted-foreground mt-2">Please check your environment variables and ensure Firebase is set up correctly.</p>
           </CardContent>
         </Card>
@@ -165,7 +164,11 @@ export default function CalendarPage() {
               initialFocus
               modifiers={{ daysWithEvents: daysWithEventsModifier }}
               modifiersClassNames={{ daysWithEvents: 'bg-accent text-accent-foreground rounded-full font-bold' }}
-              onMonthChange={(month) => fetchEventsForMonth(month)}
+              onMonthChange={(month) => {
+                // When month changes, fetch events for the new month
+                // SelectedDate will also update, triggering selectedDayEvents update
+                if (firebaseInitialized && db) fetchEventsForMonth(month);
+              }}
             />
             {selectedDate && (
               <p className="mt-4 text-center text-sm text-muted-foreground">
@@ -178,14 +181,14 @@ export default function CalendarPage() {
                 <List className="mr-2 h-5 w-5 text-primary"/>
                 Events for {selectedDate ? format(selectedDate, 'MMMM do') : 'Selected Date'}
             </h3>
-            {isLoadingEvents && !selectedDayEvents.length ? (
+            {isLoadingEvents && selectedDayEvents.length === 0 ? ( // Show skeleton only if loading and no events for day yet
                 <div className="space-y-2">
                     <Skeleton className="h-12 w-full rounded-md" />
                     <Skeleton className="h-12 w-full rounded-md" />
                 </div>
             ) : selectedDayEvents.length > 0 ? (
               <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
-                {selectedDayEvents.sort((a,b) => a.title.localeCompare(b.title)).map(event => ( // Sort selected day events by title
+                {selectedDayEvents.sort((a,b) => a.title.localeCompare(b.title)).map(event => (
                   <EventItem key={event.id} event={event} onDelete={handleDeleteEvent} />
                 ))}
               </div>
@@ -207,3 +210,12 @@ export default function CalendarPage() {
     </div>
   );
 }
+
+export default function CalendarPage() {
+  return (
+    <ProtectedRoute>
+      <CalendarPageContent />
+    </ProtectedRoute>
+  );
+}
+

@@ -8,15 +8,16 @@ import type { JournalEntry } from '@/types';
 import { useAutosave } from '@/hooks/useAutosave';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertTriangle, Save } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { format } from 'date-fns'; // Ensure format is imported
 
 interface JournalEditorProps {
-  initialEntryData?: Partial<JournalEntry>; // For new or existing entry
-  onSave: (content: string, entryId?: string) => Promise<string | undefined | void>; // Returns new/updated entry ID or void
+  initialEntryData?: Partial<JournalEntry>;
+  onSave: (content: string, entryId?: string) => Promise<string | undefined | void>;
   onClose: () => void;
   isOpen: boolean;
-  isSavingJournal: boolean; // Passed down from parent managing the save state
-  journalError?: string | null; // Passed down error
+  isSavingJournal: boolean;
+  journalError?: string | null;
 }
 
 export default function JournalEditor({
@@ -29,37 +30,32 @@ export default function JournalEditor({
 }: JournalEditorProps) {
   const [content, setContent] = useState<string>('');
   const [isDirty, setIsDirty] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true); // Local loading for initial content set
+  const [isLoadingInitial, setIsLoadingInitial] = useState<boolean>(true); // For initial data loading
 
   useEffect(() => {
-    setIsLoading(true);
-    if (initialEntryData) {
-      setContent(initialEntryData.content || '');
-    } else {
-      setContent(''); // For a completely new entry not yet in DB
+    if (isOpen) {
+      setIsLoadingInitial(true);
+      setContent(initialEntryData?.content || '');
+      setIsDirty(false);
+      setIsLoadingInitial(false);
     }
-    setIsDirty(false); // Reset dirty state when entry changes
-    setIsLoading(false);
-  }, [initialEntryData, isOpen]); // Re-run when dialog opens or initial data changes
+  }, [initialEntryData, isOpen]);
 
   const handleInternalSave = useCallback(async (currentContent: string) => {
-    if (!isDirty) return; // Don't save if not dirty
+    if (!isDirty && initialEntryData?.id) return; // Don't save if not dirty, unless it's a new entry forced save
     
-    // onSave is expected to handle isSaving state and toast
     const savedEntryId = await onSave(currentContent, initialEntryData?.id);
     
-    if (savedEntryId) { // If save was successful (indicated by returned ID or just completion)
-        setIsDirty(false);
-        // If it was a new entry and we got an ID, we might want to update initialEntryData if editor stays open
-        // For now, onClose will typically be called by parent
+    if (savedEntryId) {
+      setIsDirty(false);
+      // If it's a new entry, the parent (JournalPage) will handle updating its editingEntry state if needed
     }
-    // If save failed, error will be handled by parent via journalError prop & toast
   }, [onSave, initialEntryData?.id, isDirty]);
 
   useAutosave<string>({
     data: content,
     onSave: handleInternalSave,
-    interval: 2500,
+    interval: 3000,
     isDirty: isDirty,
   });
 
@@ -69,19 +65,21 @@ export default function JournalEditor({
   };
 
   const handleManualSaveAndClose = async () => {
-    await handleInternalSave(content); // Ensure latest content is saved
+    if (isDirty || !initialEntryData?.id) { // Save if dirty or if it's a new entry without ID
+      await handleInternalSave(content);
+    }
     onClose();
   };
   
-  const editorContent = () => {
-    if (isLoading) {
+  const editorContentArea = () => {
+    if (isLoadingInitial) {
       return (
         <div className="p-4 sm:p-6 h-[400px] md:h-[500px]">
           <Skeleton className="h-full w-full rounded-md" />
         </div>
       );
     }
-    if (journalError && !isLoading) { // Show error only if not loading initial data
+    if (journalError && !isLoadingInitial) {
       return (
         <div className="p-4 sm:p-6 text-center text-destructive-foreground bg-destructive/80 rounded-b-xl h-[400px] md:h-[500px] flex flex-col justify-center items-center">
           <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
@@ -97,34 +95,39 @@ export default function JournalEditor({
         placeholder="What's on your mind? Your progress, your struggles, your wins... Type it all out."
         className="w-full h-[350px] sm:h-[400px] md:h-[450px] p-4 text-sm sm:text-base border-0 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none bg-background text-foreground"
         aria-label="Journal Entry"
-        disabled={isSavingJournal || journalError ? true : false}
+        disabled={isSavingJournal || !!journalError}
       />
     );
   };
 
+  const lastUpdatedTime = initialEntryData?.lastUpdated instanceof Date 
+    ? initialEntryData.lastUpdated 
+    : initialEntryData?.lastUpdated?.toDate 
+    ? initialEntryData.lastUpdated.toDate() 
+    : null;
 
   return (
     <Dialog open={isOpen} onOpenChange={(openState) => !openState && onClose()}>
       <DialogContent className="sm:max-w-2xl w-[90vw] h-[80vh] flex flex-col p-0">
         <DialogHeader className="p-4 border-b">
           <DialogTitle>{initialEntryData?.id ? 'Edit Entry' : 'New Journal Entry'}</DialogTitle>
-          {initialEntryData?.lastUpdated && (
+          {lastUpdatedTime && (
             <DialogDescription className="text-xs">
-              Last saved: {initialEntryData.lastUpdated instanceof Date ? format(initialEntryData.lastUpdated, 'Pp') : 'Recently'}
+              Last saved: {format(lastUpdatedTime, 'Pp')}
             </DialogDescription>
           )}
         </DialogHeader>
         <div className="flex-grow overflow-y-auto">
-         {editorContent()}
+         {editorContentArea()}
         </div>
-        <DialogFooter className="p-4 border-t">
+        <DialogFooter className="p-4 border-t items-center">
           <span className="text-xs text-muted-foreground mr-auto">
-            {isSavingJournal ? 'Saving...' : isDirty ? 'Unsaved changes' : 'Autosaved'}
+            {isSavingJournal ? 'Saving...' : isDirty ? 'Unsaved changes' : (initialEntryData?.id ? 'Autosaved' : 'Ready to save')}
           </span>
           <Button type="button" variant="outline" onClick={onClose} disabled={isSavingJournal}>
             Close
           </Button>
-          <Button type="button" onClick={handleManualSaveAndClose} disabled={isSavingJournal || !isDirty}>
+          <Button type="button" onClick={handleManualSaveAndClose} disabled={isSavingJournal || (!isDirty && !!initialEntryData?.id) }>
              <Save className="mr-2 h-4 w-4" /> Save & Close
           </Button>
         </DialogFooter>
