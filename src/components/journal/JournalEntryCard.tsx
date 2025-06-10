@@ -5,7 +5,7 @@ import type { JournalEntry } from '@/types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
-import { Edit3, Trash2 } from 'lucide-react';
+import { Edit3, Trash2, AlertCircle } from 'lucide-react'; // Added AlertCircle for invalid date
 
 interface JournalEntryCardProps {
   entry: JournalEntry;
@@ -14,7 +14,13 @@ interface JournalEntryCardProps {
 }
 
 export default function JournalEntryCard({ entry, onEdit, onDelete }: JournalEntryCardProps) {
-  const displayDate = entry.createdAt instanceof Date ? entry.createdAt : entry.createdAt.toDate();
+  // Ensure entry.createdAt is a valid Date object
+  let displayDate: Date | null = null;
+  if (entry.createdAt instanceof Date && !isNaN(entry.createdAt.getTime())) {
+    displayDate = entry.createdAt;
+  } else if (entry.createdAt && typeof (entry.createdAt as any).toDate === 'function') { // Firestore Timestamp
+    displayDate = (entry.createdAt as any).toDate();
+  }
   
   const contentSnippet = entry.content.substring(0, 150) + (entry.content.length > 150 ? '...' : '');
 
@@ -23,12 +29,20 @@ export default function JournalEntryCard({ entry, onEdit, onDelete }: JournalEnt
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start">
           <div>
-            <CardTitle className="text-lg font-semibold">
-              {format(displayDate, 'MMMM do, yyyy')}
-            </CardTitle>
-            <CardDescription className="text-xs text-muted-foreground">
-              {format(displayDate, 'p')}
-            </CardDescription>
+            {displayDate && !isNaN(displayDate.getTime()) ? (
+              <>
+                <CardTitle className="text-lg font-semibold">
+                  {format(displayDate, 'MMMM do, yyyy')}
+                </CardTitle>
+                <CardDescription className="text-xs text-muted-foreground">
+                  {format(displayDate, 'p')}
+                </CardDescription>
+              </>
+            ) : (
+              <CardTitle className="text-lg font-semibold text-destructive flex items-center">
+                <AlertCircle className="w-4 h-4 mr-2" /> Invalid Date
+              </CardTitle>
+            )}
           </div>
            <div className="flex items-center space-x-1">
             <Button variant="ghost" size="icon" onClick={() => onEdit(entry)} className="w-8 h-8 text-primary hover:text-primary/80">

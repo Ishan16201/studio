@@ -23,27 +23,36 @@ export function useJournalList() {
       setError(fbConfigError || "Firebase is not initialized. Cannot fetch journal entries.");
       setIsLoading(false);
       setEntries([]);
-      return () => {}; // Return empty unsubscribe function
+      return () => {}; 
     }
     if (!db) {
       setError("Firestore database instance is not available. Cannot fetch journal entries.");
       setIsLoading(false);
       setEntries([]);
-      return () => {}; // Return empty unsubscribe function
+      return () => {}; 
     }
 
     const entriesColRef = collection(db, userJournalEntriesCollectionPath);
     const q = query(entriesColRef, orderBy('createdAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedEntries = snapshot.docs.map(doc => {
-        const data = doc.data();
+      const fetchedEntries = snapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        // Ensure createdAt and lastUpdated are Date objects
+        // Fallback to current date or epoch if timestamp is somehow invalid/missing,
+        // though serverTimestamp() should prevent this for new data.
+        const createdAtDate = data.createdAt instanceof Timestamp 
+                              ? data.createdAt.toDate() 
+                              : (data.createdAt ? new Date(data.createdAt) : new Date(0)); // Jan 1 1970 if truly missing
+        const lastUpdatedDate = data.lastUpdated instanceof Timestamp 
+                                ? data.lastUpdated.toDate() 
+                                : (data.lastUpdated ? new Date(data.lastUpdated) : new Date(0));
+
         return {
-          id: doc.id,
+          id: docSnap.id,
           content: data.content || '',
-          // Ensure createdAt and lastUpdated are Date objects if they come from Firestore Timestamps
-          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
-          lastUpdated: data.lastUpdated instanceof Timestamp ? data.lastUpdated.toDate() : new Date(data.lastUpdated),
+          createdAt: createdAtDate,
+          lastUpdated: lastUpdatedDate,
           userId: data.userId || USER_ID,
         } as JournalEntry;
       });
@@ -62,7 +71,7 @@ export function useJournalList() {
     });
 
     return unsubscribe;
-  }, [toast, firebaseInitialized, db, fbConfigError]);
+  }, [toast, fbConfigError]); // Removed firebaseInitialized, db from deps as they are checked inside
 
   useEffect(() => {
     const unsubscribe = fetchJournalEntries();

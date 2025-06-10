@@ -10,14 +10,15 @@ import { useToast } from '@/hooks/use-toast';
 const getJournalEntryDocPath = (entryId: string) => `userJournalEntries/${USER_ID}/entries/${entryId}`;
 const userJournalEntriesCollectionPath = `userJournalEntries/${USER_ID}/entries`;
 
-export function useJournalEntry(entryId?: string | null) { // entryId is for fetching a specific entry for editing
-  const [entry, setEntry] = useState<Partial<JournalEntry> | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+export function useJournalEntry() { 
+  const [isLoading, setIsLoading] = useState<boolean>(false); // For fetching a specific entry (less used now)
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   
-  const fetchSpecificEntry = useCallback(async (idToFetch: string) => {
+  // This function is less central if JournalEditor fetches its own initial data or receives it via props.
+  // Kept for potential future use or direct entry fetching if needed.
+  const fetchSpecificEntry = useCallback(async (idToFetch: string): Promise<Partial<JournalEntry> | null> => {
     setIsLoading(true);
     setError(null);
     if (!firebaseInitialized || !db) {
@@ -33,11 +34,10 @@ export function useJournalEntry(entryId?: string | null) { // entryId is for fet
         const fetchedEntryData = {
           id: docSnap.id,
           content: data.content || '',
-          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
-          lastUpdated: data.lastUpdated instanceof Timestamp ? data.lastUpdated.toDate() : new Date(data.lastUpdated),
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt || 0),
+          lastUpdated: data.lastUpdated instanceof Timestamp ? data.lastUpdated.toDate() : new Date(data.lastUpdated || 0),
           userId: data.userId || USER_ID,
         };
-        setEntry(fetchedEntryData); // Update local state for editor
         setIsLoading(false);
         return fetchedEntryData;
       } else {
@@ -64,54 +64,44 @@ export function useJournalEntry(entryId?: string | null) { // entryId is for fet
     setIsSaving(true);
     setError(null);
 
-    const now = serverTimestamp(); // For Firestore server-side timestamp
-    let entryToPersist: Omit<JournalEntry, 'id'> & { id?: string };
+    let entryToPersist: Omit<JournalEntry, 'id' | 'createdAt' | 'lastUpdated'> & { id?: string; createdAt?: Timestamp; lastUpdated: Timestamp };
 
-    if (currentEntryData?.id) { // Existing entry
-      entryToPersist = {
-        id: currentEntryData.id,
-        content: contentToSave,
-        userId: USER_ID,
-        createdAt: currentEntryData.createdAt instanceof Date ? Timestamp.fromDate(currentEntryData.createdAt) : currentEntryData.createdAt as Timestamp, // Preserve original createdAt
-        lastUpdated: now,
-      };
-    } else { // New entry
-      entryToPersist = {
-        content: contentToSave,
-        userId: USER_ID,
-        createdAt: now,
-        lastUpdated: now,
-      };
-    }
-    
     try {
-      if (entryToPersist.id) {
-        const docRef = doc(db, getJournalEntryDocPath(entryToPersist.id));
-        await setDoc(docRef, { 
-            content: entryToPersist.content, 
-            userId: entryToPersist.userId, 
-            createdAt: entryToPersist.createdAt, // Ensure it's a Timestamp
-            lastUpdated: entryToPersist.lastUpdated 
+      if (currentEntryData?.id) { // Existing entry
+        let originalCreatedAt = currentEntryData.createdAt;
+        if (originalCreatedAt instanceof Date) {
+            originalCreatedAt = Timestamp.fromDate(originalCreatedAt);
+        } else if (!originalCreatedAt) {
+            // Should not happen if data is fetched correctly, but as a fallback
+            originalCreatedAt = serverTimestamp() as Timestamp; 
+        }
+
+        await setDoc(doc(db, getJournalEntryDocPath(currentEntryData.id)), { 
+            content: contentToSave, 
+            userId: USER_ID, 
+            createdAt: originalCreatedAt, // Preserve original createdAt
+            lastUpdated: serverTimestamp() 
         }, { merge: true });
         toast({ title: 'Journal Updated', description: 'Your entry has been saved.' });
-        return entryToPersist.id;
-      } else {
+        setIsSaving(false);
+        return currentEntryData.id;
+      } else { // New entry
         const docRef = await addDoc(collection(db, userJournalEntriesCollectionPath), {
-            content: entryToPersist.content,
-            userId: entryToPersist.userId,
-            createdAt: entryToPersist.createdAt, // This will be a serverTimestamp
-            lastUpdated: entryToPersist.lastUpdated, // This will be a serverTimestamp
+            content: contentToSave,
+            userId: USER_ID,
+            createdAt: serverTimestamp(), 
+            lastUpdated: serverTimestamp(),
         });
         toast({ title: 'Journal Entry Saved', description: 'Your new entry has been created.' });
-        return docRef.id; // Return the new document ID
+        setIsSaving(false);
+        return docRef.id; 
       }
     } catch (err: any) {
       console.error('Error saving journal entry:', err);
       setError(`Could not save journal entry: ${err.message}`);
       toast({ title: 'Save Error', description: 'Could not save your journal entry.', variant: 'destructive' });
-      return undefined;
-    } finally {
       setIsSaving(false);
+      return undefined;
     }
   }, [toast, fbConfigError]);
   
@@ -125,17 +115,18 @@ export function useJournalEntry(entryId?: string | null) { // entryId is for fet
       const docRef = doc(db, getJournalEntryDocPath(idToDelete));
       await deleteDoc(docRef);
       toast({ title: 'Entry Deleted', description: 'Journal entry has been deleted.' });
+      setIsSaving(false);
       return true;
     } catch (error) {
       console.error("Error deleting journal entry:", error);
       toast({ title: 'Error', description: 'Could not delete journal entry.', variant: 'destructive' });
-      return false;
-    } finally {
       setIsSaving(false);
+      return false;
     }
   }, [toast, fbConfigError]);
 
   const finalError = !firebaseInitialized ? (fbConfigError || "Firebase configuration error.") : error;
 
-  return { entry, isLoading, isSaving, error: finalError, fetchSpecificEntry, saveJournalEntry, deleteJournalEntry };
+  //isLoading refers to fetching a specific entry, isSaving refers to save/delete operations.
+  return { isLoading, isSaving, error: finalError, fetchSpecificEntry, saveJournalEntry, deleteJournalEntry };
 }
