@@ -13,6 +13,8 @@ import { UserPlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
+import { getFirestore, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 
 const registerSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -40,16 +42,25 @@ export default function RegisterPage() {
 
   const onSubmit = async (data: RegisterFormValues) => {
     // TODO: Implement Firebase registration logic here (e.g., createUserWithEmailAndPassword)
-    // For now, we'll simulate registration and then login
     console.log("Registration data:", data);
     toast({
-      title: "Registration Attempted (Simulated)",
-      description: "Account creation simulated. Logging you in...",
+      title: "Attempting Registration",
+      description: "Creating your account...",
     });
     try {
-      // Pass the name to the login function
-      await login(data.email, data.password, data.name); 
-      // router.push('/'); // Redirect to dashboard is handled by login() in AuthContext
+      const auth = getAuth();
+      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+      const user = userCredential.user;
+
+      if (user) {
+        const db = getFirestore();
+        await setDoc(doc(db, "users", user.uid), {
+          name: data.name,
+          email: user.email,
+          createdAt: serverTimestamp()
+        });
+      }
+      await login(data.email, data.password); // Log the user in after registration
     } catch (error) {
       console.error("Simulated registration/login failed:", error);
       toast({
