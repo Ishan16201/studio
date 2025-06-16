@@ -6,7 +6,12 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { db, USER_ID, firebaseInitialized, firebaseInitError as fbConfigError } from '@/lib/firebase';
+import { 
+  getFirebaseDb, 
+  USER_ID, 
+  whenFirebaseInitialized, 
+  getFirebaseError 
+} from '@/lib/firebase'; // Updated imports
 import {
   doc,
   getDoc,
@@ -39,48 +44,86 @@ export default function HabitListComponent() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [newHabitName, setNewHabitName] = useState('');
   const [currentDate, setCurrentDate] = useState(new Date());
-  // No separate initError needed, fbConfigError from firebase.ts is the source of truth for config issues
+  const [pageError, setPageError] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!firebaseInitialized || !db) {
-      setIsLoading(false);
-      return; // Config error handled by main return
-    }
+    let unsubscribe: (() => void) | undefined;
+    const initializeAndFetchHabits = async () => {
+      setIsLoading(true);
+      try {
+        await whenFirebaseInitialized();
+        const db = getFirebaseDb();
+        const firebaseConfigError = getFirebaseError();
 
-    setIsLoading(true);
-    const habitsColRef = collection(db, userHabitsCollectionPath);
-    const q = query(habitsColRef, orderBy('createdAt', 'asc'));
+        if (firebaseConfigError) {
+          setPageError(firebaseConfigError);
+          setIsLoading(false);
+          return;
+        }
+        if (!db) {
+          setPageError("Firestore not available.");
+          setIsLoading(false);
+          return;
+        }
+        setPageError(null);
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const fetchedHabits = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          name: doc.data().name,
-          createdAt: doc.data().createdAt,
-          userId: doc.data().userId,
-        }));
-        setDefinedHabits(fetchedHabits);
-        setIsLoading(false);
-      },
-      (error) => {
-        console.error('Error fetching habit definitions:', error);
-        toast({
-          title: 'Error Loading Habit Definitions',
-          description: 'Could not load your habit list.',
-          variant: 'destructive',
-        });
-        setDefinedHabits([]); // Clear habits on error
+        const habitsColRef = collection(db, userHabitsCollectionPath);
+        const q = query(habitsColRef, orderBy('createdAt', 'asc'));
+
+        unsubscribe = onSnapshot(
+          q,
+          (snapshot) => {
+            const fetchedHabits = snapshot.docs.map((docSnap) => {
+              const data = docSnap.data();
+              return {
+                id: docSnap.id,
+                name: data.name,
+                createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt || 0),
+                userId: data.userId,
+              } as Habit;
+            });
+            setDefinedHabits(fetchedHabits);
+            setIsLoading(false);
+          },
+          (error) => {
+            console.error('Error fetching habit definitions:', error);
+            toast({
+              title: 'Error Loading Habit Definitions',
+              description: 'Could not load your habit list.',
+              variant: 'destructive',
+            });
+            setDefinedHabits([]); 
+            setPageError('Could not load habit definitions.');
+            setIsLoading(false);
+          }
+        );
+      } catch (initError: any) {
+        setPageError(initError.message || "Firebase initialization failed for habit list.");
         setIsLoading(false);
       }
-    );
-    return () => unsubscribe();
-  }, [toast, firebaseInitialized, db]); // Added firebaseInitialized, db
+    };
+    
+    initializeAndFetchHabits();
+    return () => unsubscribe?.();
+  }, [toast]);
 
   const fetchDailyCompletions = useCallback(async () => {
-    if (!firebaseInitialized || !db) return; // Guard against operations if Firebase not ready
     try {
+      await whenFirebaseInitialized();
+      const db = getFirebaseDb();
+      const firebaseConfigError = getFirebaseError();
+
+      if (firebaseConfigError) {
+        setPageError(firebaseConfigError); // Display error, but don't stop other components potentially
+        return;
+      }
+      if (!db) {
+        setPageError("Firestore not available for daily completions.");
+        return;
+      }
+      // No need to clear pageError here if it was set by habit definition fetch
+
       const dailyDocRef = doc(db, getDailyHabitsDocPath(currentDate));
       const docSnap = await getDoc(dailyDocRef);
       if (docSnap.exists()) {
@@ -97,30 +140,40 @@ export default function HabitListComponent() {
         variant: 'destructive',
       });
     }
-  }, [currentDate, toast, firebaseInitialized, db]); // Added firebaseInitialized, db
+  }, [currentDate, toast]); // Removed pageError from deps as it's handled internally
 
   useEffect(() => {
-    if (firebaseInitialized && db) {
-      fetchDailyCompletions();
-    }
-  }, [fetchDailyCompletions, firebaseInitialized, db]); // Added firebaseInitialized, db
+    fetchDailyCompletions();
+  }, [fetchDailyCompletions]);
 
   const handleAddHabit = async () => {
-    if (!firebaseInitialized || !db) {
-      toast({ title: 'Error', description: 'Cannot add habit: Firebase not configured.', variant: 'destructive' });
-      return;
-    }
-    const trimmedName = newHabitName.trim();
-    if (trimmedName === '') {
-      toast({ title: 'Empty Habit Name', description: 'Please enter a name for your habit.', variant: 'destructive' });
-      return;
-    }
-    if (definedHabits.some(h => h.name.toLowerCase() === trimmedName.toLowerCase())) {
-        toast({ title: 'Duplicate Habit', description: 'This habit name already exists.', variant: 'destructive' });
-        return;
-    }
-
     try {
+      await whenFirebaseInitialized();
+      const db = getFirebaseDb();
+      const firebaseConfigError = getFirebaseError();
+
+      if (firebaseConfigError) {
+        toast({ title: 'Error', description: firebaseConfigError, variant: 'destructive' });
+        setPageError(firebaseConfigError);
+        return;
+      }
+      if (!db) {
+        toast({ title: 'Error', description: 'Cannot add habit: Firebase not configured.', variant: 'destructive' });
+        setPageError("Firestore not available.");
+        return;
+      }
+      setPageError(null);
+
+      const trimmedName = newHabitName.trim();
+      if (trimmedName === '') {
+        toast({ title: 'Empty Habit Name', description: 'Please enter a name for your habit.', variant: 'destructive' });
+        return;
+      }
+      if (definedHabits.some(h => h.name.toLowerCase() === trimmedName.toLowerCase())) {
+          toast({ title: 'Duplicate Habit', description: 'This habit name already exists.', variant: 'destructive' });
+          return;
+      }
+
       await addDoc(collection(db, userHabitsCollectionPath), {
         name: trimmedName,
         createdAt: serverTimestamp(),
@@ -135,11 +188,22 @@ export default function HabitListComponent() {
   };
 
   const handleDeleteHabit = async (habitId: string, habitName: string) => {
-    if (!firebaseInitialized || !db) {
-      toast({ title: 'Error', description: 'Cannot delete habit: Firebase not configured.', variant: 'destructive' });
-      return;
-    }
     try {
+      await whenFirebaseInitialized();
+      const db = getFirebaseDb();
+      const firebaseConfigError = getFirebaseError();
+      if (firebaseConfigError) {
+        toast({ title: 'Error', description: firebaseConfigError, variant: 'destructive' });
+        setPageError(firebaseConfigError);
+        return;
+      }
+      if (!db) {
+        toast({ title: 'Error', description: 'Cannot delete habit: Firebase not configured.', variant: 'destructive' });
+        setPageError("Firestore not available.");
+        return;
+      }
+       setPageError(null);
+
       await deleteDoc(doc(db, userHabitsCollectionPath, habitId));
       
       const updatedDailyCompletions = { ...dailyCompletions };
@@ -157,10 +221,6 @@ export default function HabitListComponent() {
   };
 
   const handleToggleHabit = async (habitName: string, newCompletedStatus: boolean) => {
-    if (!firebaseInitialized || !db) {
-      toast({ title: 'Error', description: 'Cannot update habit: Firebase not configured.', variant: 'destructive' });
-      return;
-    }
     const originalCompletions = { ...dailyCompletions };
     
     const updatedCompletions = {
@@ -170,12 +230,29 @@ export default function HabitListComponent() {
     setDailyCompletions(updatedCompletions); 
 
     try {
+      await whenFirebaseInitialized();
+      const db = getFirebaseDb();
+      const firebaseConfigError = getFirebaseError();
+      if (firebaseConfigError) {
+        toast({ title: 'Error', description: firebaseConfigError, variant: 'destructive' });
+        setPageError(firebaseConfigError);
+        setDailyCompletions(originalCompletions); // Revert
+        return;
+      }
+      if (!db) {
+        toast({ title: 'Error', description: 'Cannot update habit: Firebase not configured.', variant: 'destructive' });
+        setPageError("Firestore not available.");
+        setDailyCompletions(originalCompletions); // Revert
+        return;
+      }
+       setPageError(null);
+
       const dailyDocRef = doc(db, getDailyHabitsDocPath(currentDate));
       const habitsToSave: Record<string, boolean> = {};
-      definedHabits.forEach(h => {
+      definedHabits.forEach(h => { // Ensure all defined habits are part of the save, defaulting to false
         habitsToSave[h.name] = updatedCompletions[h.name] || false;
       });
-      habitsToSave[habitName] = newCompletedStatus;
+      habitsToSave[habitName] = newCompletedStatus; // Set the toggled one specifically
 
       await setDoc(dailyDocRef, { date: format(currentDate, 'yyyy-MM-dd'), habits: habitsToSave }, { merge: true });
     } catch (error) {
@@ -189,12 +266,12 @@ export default function HabitListComponent() {
     }
   };
   
-  if (!firebaseInitialized) {
+  if (pageError && isLoading) { // If there's an error during initial load, show it
     return (
       <div className="w-full p-4 text-center text-destructive-foreground bg-destructive/80 rounded-md">
         <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
         <p className="font-semibold">Configuration Error</p>
-        <p className="text-sm">{fbConfigError || "Firebase is not configured. Please check console and setup."}</p>
+        <p className="text-sm">{pageError}</p>
       </div>
     );
   }
@@ -215,6 +292,20 @@ export default function HabitListComponent() {
       </div>
     );
   }
+  
+  // If not loading, but still have a pageError (e.g., failed to fetch habits but daily completions might work or vice versa)
+  // This allows parts of the component to function if only one Firebase operation fails.
+  // For critical errors (like Firebase not init), the `pageError && isLoading` check handles it.
+  if (pageError && !isLoading && definedHabits.length === 0) { 
+     return (
+      <div className="w-full p-4 text-center text-destructive-foreground bg-destructive/80 rounded-md">
+        <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
+        <p className="font-semibold">Error</p>
+        <p className="text-sm">{pageError}</p>
+      </div>
+    );
+  }
+
 
   const displayHabits = definedHabits.map(habit => ({
     ...habit,
@@ -268,3 +359,4 @@ export default function HabitListComponent() {
     </div>
   );
 }
+

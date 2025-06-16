@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertTriangle } from 'lucide-react';
 import type { CalendarEvent } from '@/types';
-import { db, USER_ID, firebaseInitialized, firebaseInitError } from '@/lib/firebase';
+import { getFirebaseDb, USER_ID, whenFirebaseInitialized, getFirebaseError } from '@/lib/firebase';
 import { collection, query, where, orderBy, limit, onSnapshot, Timestamp } from 'firebase/firestore';
 import { format, isSameDay, parseISO, isValid } from 'date-fns';
 import Link from 'next/link';
@@ -23,70 +23,82 @@ export default function UpcomingEventsWidget({ maxEvents = 3 }: UpcomingEventsWi
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!firebaseInitialized) {
-      setError(firebaseInitError || "Firebase not configured.");
-      setIsLoading(false);
-      return () => {};
-    }
-    if (!db) {
-        setError("Firestore not available.");
-        setIsLoading(false);
-        return () => {};
-    }
+    let unsubscribe: (() => void) | null = null;
 
-    setIsLoading(true);
-    setError(null);
+    const initializeAndFetch = async () => {
+      setIsLoading(true);
+      try {
+        await whenFirebaseInitialized(); // Wait for Firebase to be ready
+        const db = getFirebaseDb();
+        const firebaseConfigError = getFirebaseError();
 
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
-    const eventsColRef = collection(db, userEventsCollectionPath);
-    const q = query(
-      eventsColRef,
-      where('date', '>=', todayStr),
-      orderBy('date', 'asc'),
-      limit(maxEvents)
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedEvents = snapshot.docs.map(doc => {
-        const data = doc.data();
-        let createdAtDate: Date;
-        if (data.createdAt instanceof Timestamp) {
-            createdAtDate = data.createdAt.toDate();
-        } else if (data.createdAt && typeof data.createdAt.seconds === 'number') {
-            createdAtDate = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds).toDate();
-        } else {
-            createdAtDate = new Date(data.createdAt || 0);
+        if (firebaseConfigError) {
+          setError(firebaseConfigError);
+          setIsLoading(false);
+          return;
+        }
+        if (!db) {
+          setError("Firestore not available.");
+          setIsLoading(false);
+          return;
         }
         
-        return {
-          id: doc.id,
-          title: data.title,
-          description: data.description,
-          date: data.date,
-          userId: data.userId,
-          createdAt: createdAtDate,
-        } as CalendarEvent;
-      });
-      setUpcomingEvents(fetchedEvents);
-      setIsLoading(false);
-    }, (err) => {
-      console.error("Error fetching upcoming events:", err);
-      setError("Could not load upcoming events.");
-      setIsLoading(false);
-    });
+        setError(null);
 
-    return () => unsubscribe();
-  }, [maxEvents]); // firebaseInitialized, firebaseInitError, db removed as they are checked inside effect
+        const todayStr = format(new Date(), 'yyyy-MM-dd');
+        const eventsColRef = collection(db, userEventsCollectionPath);
+        const q = query(
+          eventsColRef,
+          where('date', '>=', todayStr),
+          orderBy('date', 'asc'),
+          limit(maxEvents)
+        );
 
-  if (!firebaseInitialized && (error || firebaseInitError)) { 
-     return (
-      <div className="p-4 text-center text-xs">
-        <AlertTriangle className="mx-auto h-6 w-6 text-destructive mb-1" />
-        <p className="text-destructive">{error || firebaseInitError || "Error loading events."}</p>
-      </div>
-    );
-  }
-  
+        unsubscribe = onSnapshot(q, (snapshot) => {
+          const fetchedEvents = snapshot.docs.map(doc => {
+            const data = doc.data();
+            let createdAtDate: Date;
+            if (data.createdAt instanceof Timestamp) {
+                createdAtDate = data.createdAt.toDate();
+            } else if (data.createdAt && typeof data.createdAt.seconds === 'number') {
+                createdAtDate = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds).toDate();
+            } else {
+                createdAtDate = new Date(data.createdAt || 0);
+            }
+            
+            return {
+              id: doc.id,
+              title: data.title,
+              description: data.description,
+              date: data.date,
+              userId: data.userId,
+              createdAt: createdAtDate,
+            } as CalendarEvent;
+          });
+          setUpcomingEvents(fetchedEvents);
+          setIsLoading(false);
+        }, (err) => {
+          console.error("Error fetching upcoming events:", err);
+          setError("Could not load upcoming events.");
+          setIsLoading(false);
+        });
+
+      } catch (initError: any) {
+        console.error("Firebase initialization error in UpcomingEventsWidget:", initError);
+        setError(initError.message || "Failed to initialize Firebase for upcoming events.");
+        setIsLoading(false);
+      }
+    };
+
+    initializeAndFetch();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [maxEvents]);
+
   if (isLoading) {
     return (
       <div className="space-y-2 p-4">
@@ -97,7 +109,7 @@ export default function UpcomingEventsWidget({ maxEvents = 3 }: UpcomingEventsWi
     );
   }
   
-  if (error) { // Show non-config related errors
+  if (error) { 
      return (
       <div className="p-4 text-center text-xs">
         <AlertTriangle className="mx-auto h-6 w-6 text-destructive mb-1" />

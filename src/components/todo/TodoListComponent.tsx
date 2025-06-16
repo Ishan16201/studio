@@ -7,9 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { PlusCircle, Trash2, AlertTriangle, Circle, AlertCircle, ChevronsUp } from 'lucide-react';
+import { PlusCircle, Trash2, AlertTriangle, Circle, AlertCircle as AlertCircleIcon, ChevronsUp } from 'lucide-react'; // Renamed AlertCircle to avoid conflict
 import type { TodoItem, TaskPriority } from '@/types';
-import { db, USER_ID, firebaseInitialized, firebaseInitError as fbConfigError } from '@/lib/firebase';
+import { getFirebaseDb, USER_ID, whenFirebaseInitialized, getFirebaseError } from '@/lib/firebase';
 import {
   collection,
   query,
@@ -35,7 +35,7 @@ interface TodoListComponentProps {
 
 const priorityIcons: Record<TaskPriority, React.ElementType> = {
   urgent: ChevronsUp,
-  medium: AlertCircle,
+  medium: AlertCircleIcon, // Use the renamed import
   low: Circle,
 };
 
@@ -61,54 +61,73 @@ export default function TodoListComponent({
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>('medium');
   const [isLoading, setIsLoading] = useState(true);
-  const [operationalError, setOperationalError] = useState<string | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!firebaseInitialized || !db) {
-      setIsLoading(false);
-      return;
-    }
+    let unsubscribe: (() => void) | undefined;
+    const initAndFetch = async () => {
+      setIsLoading(true);
+      try {
+        await whenFirebaseInitialized();
+        const db = getFirebaseDb();
+        const firebaseConfigError = getFirebaseError();
 
-    setIsLoading(true);
-    setOperationalError(null);
-    const tasksCol = collection(db, 'todos');
-    const q = query(
-      tasksCol,
-      where('userId', '==', USER_ID)
-      // Initial orderBy. Sorting will be done client-side for priority
-      // orderBy('createdAt', 'desc') 
-    );
+        if (firebaseConfigError) {
+          setPageError(firebaseConfigError);
+          setIsLoading(false);
+          return;
+        }
+        if (!db) {
+          setPageError("Firestore not available.");
+          setIsLoading(false);
+          return;
+        }
+        setPageError(null);
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const fetchedTasks = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          priority: 'medium', // Default if not present
-          ...(doc.data() as Omit<TodoItem, 'id' | 'priority'> & { priority?: TaskPriority }),
-        })) as TodoItem[];
-        setTasks(fetchedTasks);
-        setIsLoading(false);
-      },
-      (err) => {
-        console.error('Error fetching tasks:', err);
-        setOperationalError('Failed to load tasks. Please try again.');
-        toast({
-          title: 'Error',
-          description: 'Could not load tasks.',
-          variant: 'destructive',
-        });
+        const tasksCol = collection(db, 'todos');
+        const q = query(
+          tasksCol,
+          where('userId', '==', USER_ID)
+        );
+
+        unsubscribe = onSnapshot(
+          q,
+          (snapshot) => {
+            const fetchedTasks = snapshot.docs.map((doc) => ({
+              id: doc.id,
+              priority: 'medium', 
+              ...(doc.data() as Omit<TodoItem, 'id' | 'priority'> & { priority?: TaskPriority }),
+              createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt || 0)
+            })) as TodoItem[];
+            setTasks(fetchedTasks);
+            setIsLoading(false);
+          },
+          (err) => {
+            console.error('Error fetching tasks:', err);
+            setPageError('Failed to load tasks. Please try again.');
+            toast({
+              title: 'Error',
+              description: 'Could not load tasks.',
+              variant: 'destructive',
+            });
+            setIsLoading(false);
+          }
+        );
+      } catch (initError: any) {
+        setPageError(initError.message || "Firebase initialization failed.");
         setIsLoading(false);
       }
-    );
-
-    return () => unsubscribe();
-  }, [toast, firebaseInitialized, db]);
+    };
+    initAndFetch();
+    return () => unsubscribe?.();
+  }, [toast]);
 
   const addTask = async () => {
-    if (!firebaseInitialized || !db) {
+    const db = getFirebaseDb();
+    if (!db) {
       toast({ title: 'Error', description: 'Cannot add task: Firebase not configured.', variant: 'destructive' });
+      setPageError("Firebase not configured.");
       return;
     }
     if (newTaskText.trim() === '') return;
@@ -121,7 +140,7 @@ export default function TodoListComponent({
         userId: USER_ID,
       });
       setNewTaskText('');
-      setNewTaskPriority('medium'); // Reset priority
+      setNewTaskPriority('medium');
     } catch (err) {
       console.error('Error adding task:', err);
       toast({
@@ -133,8 +152,10 @@ export default function TodoListComponent({
   };
 
   const toggleTask = async (id: string, currentCompleted: boolean) => {
-    if (!firebaseInitialized || !db) {
+    const db = getFirebaseDb();
+    if (!db) {
       toast({ title: 'Error', description: 'Cannot update task: Firebase not configured.', variant: 'destructive' });
+      setPageError("Firebase not configured.");
       return;
     }
     const taskRef = doc(db, 'todos', id);
@@ -151,8 +172,10 @@ export default function TodoListComponent({
   };
 
   const deleteTask = async (id: string) => {
-    if (!firebaseInitialized || !db) {
+    const db = getFirebaseDb();
+    if (!db) {
       toast({ title: 'Error', description: 'Cannot delete task: Firebase not configured.', variant: 'destructive' });
+      setPageError("Firebase not configured.");
       return;
     }
     const taskRef = doc(db, 'todos', id);
@@ -176,23 +199,26 @@ export default function TodoListComponent({
 
   const sortedTasks = [...tasks].sort((a, b) => {
     if (a.completed !== b.completed) {
-      return a.completed ? 1 : -1; // Incomplete tasks first
+      return a.completed ? 1 : -1; 
     }
     if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
-      return priorityOrder[a.priority] - priorityOrder[b.priority]; // Sort by priority
+      return priorityOrder[a.priority] - priorityOrder[b.priority]; 
     }
-    return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0); // Then by creation date (newest first)
+    const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() : 0;
+    const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() : 0;
+    return bTime - aTime; 
   });
 
-  if (!firebaseInitialized) {
+  if (pageError && isLoading) { // Prioritize showing page error if still loading
     return (
       <div className="w-full p-4 text-center text-destructive-foreground bg-destructive/80 rounded-md">
         <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
         <p className="font-semibold">Configuration Error</p>
-        <p className="text-sm">{fbConfigError || "Firebase is not configured. Please check console and setup."}</p>
+        <p className="text-sm">{pageError}</p>
       </div>
     );
   }
+
 
   if (isLoading) {
     return (
@@ -201,8 +227,8 @@ export default function TodoListComponent({
         {enableAdding && (
           <div className="flex gap-2 mb-4">
             <Skeleton className="h-10 flex-grow" />
-            <Skeleton className="h-10 w-24" /> {/* For priority select */}
-            <Skeleton className="h-10 w-10" /> {/* For add button */}
+            <Skeleton className="h-10 w-24" /> 
+            <Skeleton className="h-10 w-10" /> 
           </div>
         )}
         <Skeleton className="h-10 w-full rounded-md" />
@@ -211,13 +237,13 @@ export default function TodoListComponent({
       </div>
     );
   }
-
-  if (operationalError) { 
+  
+  if (pageError && !isLoading) { // Show operational error if loading is done but error persists
     return (
       <div className="w-full p-4 text-center text-destructive-foreground bg-destructive/80 rounded-md">
         <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
         <p className="font-semibold">Error Loading Tasks</p>
-        <p className="text-sm">{operationalError}</p>
+        <p className="text-sm">{pageError}</p>
       </div>
     );
   }

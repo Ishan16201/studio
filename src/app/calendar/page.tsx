@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { format, startOfMonth, endOfMonth, parseISO, isValid } from 'date-fns';
 import type { CalendarEvent } from '@/types';
-import { firebaseInitialized, firebaseInitError as fbConfigError, db, USER_ID } from '@/lib/firebase';
+import { getFirebaseDb, USER_ID, whenFirebaseInitialized, getFirebaseError } from '@/lib/firebase';
 import { collection, addDoc, query, where, onSnapshot, deleteDoc, doc, serverTimestamp, Timestamp, orderBy } from 'firebase/firestore';
 import EventFormDialog from '@/components/calendar/EventFormDialog';
 import EventItem from '@/components/calendar/EventItem';
@@ -26,9 +26,10 @@ function CalendarPageContent() {
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const { toast } = useToast();
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [pageError, setPageError] = useState<string | null>(null);
 
-  const fetchEventsForMonth = useCallback((dateForMonth: Date) => {
-    if (!firebaseInitialized || !db) {
+  const fetchEventsForMonth = useCallback((dateForMonth: Date, dbInstance: any) => {
+    if (!dbInstance) {
       setIsLoadingEvents(false);
       return () => {}; 
     }
@@ -36,7 +37,7 @@ function CalendarPageContent() {
     const monthStart = startOfMonth(dateForMonth);
     const monthEnd = endOfMonth(dateForMonth);
 
-    const eventsColRef = collection(db, userEventsCollectionPath);
+    const eventsColRef = collection(dbInstance, userEventsCollectionPath);
     const q = query(eventsColRef, 
                     where('date', '>=', format(monthStart, 'yyyy-MM-dd')), 
                     where('date', '<=', format(monthEnd, 'yyyy-MM-dd')),
@@ -69,17 +70,40 @@ function CalendarPageContent() {
     }, (error) => {
       console.error("Error fetching month events:", error);
       toast({ title: "Error", description: "Could not load events for the month.", variant: "destructive" });
+      setPageError("Could not load events for the month.");
       setIsLoadingEvents(false);
     });
     return unsubscribe;
   }, [toast]); 
 
   useEffect(() => {
-    if (firebaseInitialized && db) { 
-      const unsubscribe = fetchEventsForMonth(currentMonth);
-      return () => unsubscribe?.();
-    }
-  }, [currentMonth, fetchEventsForMonth, firebaseInitialized, db]);
+    let unsubscribe: (() => void) | undefined;
+    const initAndFetch = async () => {
+      setIsLoadingEvents(true);
+      try {
+        await whenFirebaseInitialized();
+        const db = getFirebaseDb();
+        const firebaseConfigError = getFirebaseError();
+
+        if (firebaseConfigError) {
+          setPageError(firebaseConfigError);
+          setIsLoadingEvents(false);
+          return;
+        }
+        if (!db) {
+          setPageError("Firestore not available.");
+          setIsLoadingEvents(false);
+          return;
+        }
+        unsubscribe = fetchEventsForMonth(currentMonth, db);
+      } catch (initError: any) {
+        setPageError(initError.message || "Firebase initialization failed.");
+        setIsLoadingEvents(false);
+      }
+    };
+    initAndFetch();
+    return () => unsubscribe?.();
+  }, [currentMonth, fetchEventsForMonth]);
 
   useEffect(() => {
     if (selectedDate) {
@@ -100,8 +124,10 @@ function CalendarPageContent() {
 
 
   const handleAddEvent = async (eventData: Omit<CalendarEvent, 'id' | 'userId' | 'createdAt'>) => {
-    if (!firebaseInitialized || !db) {
+    const db = getFirebaseDb();
+    if (!db) {
       toast({ title: "Error", description: "Firebase not configured. Cannot save event.", variant: "destructive" });
+      setPageError("Firebase not configured. Cannot save event.");
       return;
     }
     try {
@@ -118,8 +144,10 @@ function CalendarPageContent() {
   };
 
   const handleDeleteEvent = async (eventId: string) => {
-    if (!firebaseInitialized || !db) {
+    const db = getFirebaseDb();
+    if (!db) {
       toast({ title: "Error", description: "Firebase not configured. Cannot delete event.", variant: "destructive" });
+      setPageError("Firebase not configured. Cannot delete event.");
       return;
     }
     try {
@@ -137,7 +165,7 @@ function CalendarPageContent() {
     })
     .filter(date => date && isValid(date)) as Date[];
 
-  if (!firebaseInitialized && fbConfigError) { // Show config error only if it's present
+  if (pageError && isLoadingEvents) { // Show config error only if it's present and still loading
     return (
       <div className="container mx-auto max-w-2xl p-4 md:p-8">
         <Card className="shadow-xl rounded-xl bg-card">
@@ -148,7 +176,7 @@ function CalendarPageContent() {
             <CardTitle className="text-2xl sm:text-3xl font-bold">Configuration Error</CardTitle>
           </CardHeader>
           <CardContent className="p-6 text-center">
-            <p className="text-lg text-foreground">{fbConfigError}</p>
+            <p className="text-lg text-foreground">{pageError}</p>
             <p className="text-sm text-muted-foreground mt-2">Please check your environment variables and ensure Firebase is set up correctly.</p>
           </CardContent>
         </Card>

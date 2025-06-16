@@ -9,7 +9,7 @@ import { ListChecks, CalendarSearch, AlertTriangle } from 'lucide-react';
 import { format, startOfYear, endOfYear, parseISO, isValid } from 'date-fns';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import type { Habit } from '@/types';
-import { db, USER_ID, firebaseInitialized, firebaseInitError as fbConfigError } from '@/lib/firebase';
+import { getFirebaseDb, USER_ID, whenFirebaseInitialized, getFirebaseError } from '@/lib/firebase';
 import { collection, query, orderBy, onSnapshot, getDocs, where, doc, setDoc, getDoc, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -36,69 +36,107 @@ function HabitsPageContent() {
 
 
   useEffect(() => {
-    if (!firebaseInitialized) {
-      setIsLoadingHabits(false);
-      setIsLoadingLogs(false);
-      setPageError(fbConfigError || "Firebase not configured. Habit tracking features might be unavailable.");
-    } else {
-      setPageError(null); 
-    }
-  }, [firebaseInitialized, fbConfigError]);
+    const checkFirebase = async () => {
+      try {
+        await whenFirebaseInitialized();
+        const firebaseConfigError = getFirebaseError();
+        if (firebaseConfigError) {
+          setPageError(firebaseConfigError);
+          setIsLoadingHabits(false);
+          setIsLoadingLogs(false);
+        } else {
+          setPageError(null);
+        }
+      } catch (initError: any) {
+        setPageError(initError.message || "Firebase initialization failed.");
+        setIsLoadingHabits(false);
+        setIsLoadingLogs(false);
+      }
+    };
+    checkFirebase();
+  }, []);
 
 
   useEffect(() => {
-    if (!firebaseInitialized || !db || pageError) { // Don't fetch if Firebase error or pageError already set
+    if (pageError) {
       setIsLoadingHabits(false); 
       return () => {};
     }
-    setIsLoadingHabits(true);
-    const habitsColRef = collection(db, userHabitsCollectionPath);
-    const q = query(habitsColRef, orderBy('createdAt', 'asc'));
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const fetchedHabits = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data();
-          let createdAtDate: Date;
-          if (data.createdAt instanceof Timestamp) {
-            createdAtDate = data.createdAt.toDate();
-          } else if (data.createdAt && typeof data.createdAt.seconds === 'number') {
-            createdAtDate = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds).toDate();
-          } else {
-            createdAtDate = new Date(data.createdAt || 0); // Fallback
+    let unsubscribe: (() => void) | undefined;
+    const fetchHabits = async () => {
+      setIsLoadingHabits(true);
+      try {
+        await whenFirebaseInitialized();
+        const db = getFirebaseDb();
+        if (!db) {
+          setPageError("Firestore not available.");
+          setIsLoadingHabits(false);
+          return;
+        }
+
+        const habitsColRef = collection(db, userHabitsCollectionPath);
+        const q = query(habitsColRef, orderBy('createdAt', 'asc'));
+
+        unsubscribe = onSnapshot(
+          q,
+          (snapshot) => {
+            const fetchedHabits = snapshot.docs.map((docSnap) => {
+              const data = docSnap.data();
+              let createdAtDate: Date;
+              if (data.createdAt instanceof Timestamp) {
+                createdAtDate = data.createdAt.toDate();
+              } else if (data.createdAt && typeof data.createdAt.seconds === 'number') {
+                createdAtDate = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds).toDate();
+              } else {
+                createdAtDate = new Date(data.createdAt || 0); // Fallback
+              }
+              return {
+                id: docSnap.id,
+                name: data.name,
+                createdAt: createdAtDate,
+                userId: data.userId,
+              } as Habit;
+            });
+            setDefinedHabits(fetchedHabits);
+            setIsLoadingHabits(false);
+          },
+          (error) => {
+            console.error('Error fetching habit definitions for page:', error);
+            toast({
+              title: 'Error Loading Habits',
+              description: 'Could not load your habit definitions.',
+              variant: 'destructive',
+            });
+            setPageError('Could not load habit definitions.');
+            setIsLoadingHabits(false);
           }
-          return {
-            id: docSnap.id,
-            name: data.name,
-            createdAt: createdAtDate,
-            userId: data.userId,
-          } as Habit;
-        });
-        setDefinedHabits(fetchedHabits);
-        setIsLoadingHabits(false);
-      },
-      (error) => {
-        console.error('Error fetching habit definitions for page:', error);
-        toast({
-          title: 'Error Loading Habits',
-          description: 'Could not load your habit definitions.',
-          variant: 'destructive',
-        });
-        setPageError('Could not load habit definitions.');
+        );
+      } catch (initError: any) {
+        setPageError(initError.message || "Firebase initialization failed.");
         setIsLoadingHabits(false);
       }
-    );
-    return () => unsubscribe();
-  }, [toast, pageError]); // Removed firebaseInitialized, db as they are checked earlier
+    };
+    
+    fetchHabits();
+    return () => unsubscribe?.();
+  }, [toast, pageError]);
 
   const fetchAllYearlyLogs = useCallback(async () => {
-      if (!firebaseInitialized || !db || pageError) {
+      if (pageError) {
         setIsLoadingLogs(false);
         return;
       }
       setIsLoadingLogs(true);
       try {
+        await whenFirebaseInitialized();
+        const db = getFirebaseDb();
+        if (!db) {
+          setPageError("Firestore not available.");
+          setIsLoadingLogs(false);
+          return;
+        }
+
         const yearStart = startOfYear(new Date(currentYear, 0, 1));
         const yearEnd = endOfYear(new Date(currentYear, 11, 31));
 
@@ -125,17 +163,19 @@ function HabitsPageContent() {
       } finally {
         setIsLoadingLogs(false);
       }
-    }, [currentYear, toast, pageError]); // Removed firebaseInitialized, db
+    }, [currentYear, toast, pageError]);
 
   useEffect(() => {
-    if (firebaseInitialized && db && !pageError) { // Only fetch if no critical page error
+    if (!pageError) {
      fetchAllYearlyLogs();
     }
-  }, [fetchAllYearlyLogs, firebaseInitialized, db, pageError]);
+  }, [fetchAllYearlyLogs, pageError]);
 
   const handleTogglePastHabit = useCallback(async (date: Date, habitName: string, currentStatus: boolean) => {
-    if (!firebaseInitialized || !db) {
+    const db = getFirebaseDb();
+    if (!db) {
       toast({ title: 'Error', description: 'Cannot update habit: Firebase not configured.', variant: 'destructive' });
+      setPageError("Firebase not configured.");
       return;
     }
     const dateString = format(date, 'yyyy-MM-dd');
@@ -166,7 +206,6 @@ function HabitsPageContent() {
       if (docSnap.exists()) {
         newHabitsData = { ...(docSnap.data().habits || {}) };
       }
-      // Ensure all defined habits have a state (defaulting to false if not present)
       definedHabits.forEach(h => {
         if (!(h.name in newHabitsData)) {
           newHabitsData[h.name] = false;
@@ -189,9 +228,9 @@ function HabitsPageContent() {
       });
       fetchAllYearlyLogs(); 
     }
-  }, [firebaseInitialized, db, toast, definedHabits, fetchAllYearlyLogs]);
+  }, [toast, definedHabits, fetchAllYearlyLogs]);
 
-  if (pageError) {
+  if (pageError && (isLoadingHabits || isLoadingLogs)) { // Prioritize showing page error
     return (
       <div className="container mx-auto max-w-4xl p-4 md:p-8">
         <Card className="shadow-xl rounded-xl mb-8">

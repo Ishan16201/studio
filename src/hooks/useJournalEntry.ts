@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { db, USER_ID, firebaseInitialized, firebaseInitError as fbConfigError } from '@/lib/firebase';
+import { getFirebaseDb, USER_ID, whenFirebaseInitialized, getFirebaseError } from '@/lib/firebase';
 import { doc, Timestamp, setDoc, addDoc, collection, serverTimestamp, deleteDoc, getDoc, DocumentSnapshot } from 'firebase/firestore';
 import type { JournalEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
@@ -18,13 +18,23 @@ export function useJournalEntry() {
   
   const fetchSpecificEntry = useCallback(async (idToFetch: string): Promise<JournalEntry | null> => {
     setIsLoading(true);
-    setError(null);
-    if (!firebaseInitialized || !db) {
-      setError(fbConfigError || "Firebase not initialized.");
-      setIsLoading(false);
-      return null;
-    }
     try {
+      await whenFirebaseInitialized();
+      const db = getFirebaseDb();
+      const firebaseConfigError = getFirebaseError();
+
+      if (firebaseConfigError) {
+        setError(firebaseConfigError);
+        setIsLoading(false);
+        return null;
+      }
+      if (!db) {
+        setError("Firestore not available.");
+        setIsLoading(false);
+        return null;
+      }
+      setError(null);
+
       const docRef = doc(db, getJournalEntryDocPath(idToFetch));
       const docSnap: DocumentSnapshot = await getDoc(docRef);
       if (docSnap.exists()) {
@@ -69,26 +79,35 @@ export function useJournalEntry() {
       setIsLoading(false);
       return null;
     }
-  }, [toast, fbConfigError]);
+  }, [toast]);
 
 
   const saveJournalEntry = useCallback(async (contentToSave: string, currentEntryData?: Partial<JournalEntry>): Promise<string | undefined> => {
-    if (!firebaseInitialized || !db) {
-      toast({ title: 'Error', description: 'Cannot save: Firebase not configured.', variant: 'destructive' });
-      setError(fbConfigError || "Firebase not configured.");
-      return undefined;
-    }
     setIsSaving(true);
-    setError(null);
-
     try {
-      if (currentEntryData?.id) { // Existing entry
+      await whenFirebaseInitialized();
+      const db = getFirebaseDb();
+      const firebaseConfigError = getFirebaseError();
+
+      if (firebaseConfigError) {
+        toast({ title: 'Error', description: firebaseConfigError, variant: 'destructive' });
+        setError(firebaseConfigError);
+        setIsSaving(false);
+        return undefined;
+      }
+      if (!db) {
+        toast({ title: 'Error', description: 'Cannot save: Firebase not configured.', variant: 'destructive' });
+        setError("Firestore not available.");
+        setIsSaving(false);
+        return undefined;
+      }
+      setError(null);
+
+      if (currentEntryData?.id) { 
         let originalCreatedAt = currentEntryData.createdAt;
-        // Ensure originalCreatedAt is a Firestore Timestamp or convert it if it's a Date
         if (originalCreatedAt instanceof Date) {
             originalCreatedAt = Timestamp.fromDate(originalCreatedAt);
         } else if (!originalCreatedAt || !(originalCreatedAt instanceof Timestamp)) {
-            // Fallback if somehow not a Timestamp or Date, though this path should ideally not be hit with good data
             originalCreatedAt = serverTimestamp() as Timestamp; 
         }
 
@@ -101,7 +120,7 @@ export function useJournalEntry() {
         toast({ title: 'Journal Updated', description: 'Your entry has been saved.' });
         setIsSaving(false);
         return currentEntryData.id;
-      } else { // New entry
+      } else { 
         const docRef = await addDoc(collection(db, userJournalEntriesCollectionPath), {
             content: contentToSave,
             userId: USER_ID,
@@ -119,29 +138,45 @@ export function useJournalEntry() {
       setIsSaving(false);
       return undefined;
     }
-  }, [toast, fbConfigError]);
+  }, [toast]);
   
   const deleteJournalEntry = useCallback(async (idToDelete: string): Promise<boolean> => {
-    if (!firebaseInitialized || !db) {
-      toast({ title: 'Error', description: 'Cannot delete: Firebase not configured.', variant: 'destructive' });
-      return false;
-    }
-    setIsSaving(true); 
+    setIsSaving(true); // Indicate an operation is in progress
     try {
+      await whenFirebaseInitialized();
+      const db = getFirebaseDb();
+      const firebaseConfigError = getFirebaseError();
+
+      if (firebaseConfigError) {
+        toast({ title: 'Error', description: firebaseConfigError, variant: 'destructive' });
+        setError(firebaseConfigError);
+        setIsSaving(false);
+        return false;
+      }
+      if (!db) {
+        toast({ title: 'Error', description: 'Cannot delete: Firebase not configured.', variant: 'destructive' });
+        setError("Firestore not available.");
+        setIsSaving(false);
+        return false;
+      }
+      setError(null);
+
       const docRef = doc(db, getJournalEntryDocPath(idToDelete));
       await deleteDoc(docRef);
       toast({ title: 'Entry Deleted', description: 'Journal entry has been deleted.' });
       setIsSaving(false);
       return true;
-    } catch (error) {
-      console.error("Error deleting journal entry:", error);
+    } catch (err: any) {
+      console.error("Error deleting journal entry:", err);
+      setError(`Could not delete journal entry: ${err.message}`);
       toast({ title: 'Error', description: 'Could not delete journal entry.', variant: 'destructive' });
       setIsSaving(false);
       return false;
     }
-  }, [toast, fbConfigError]);
+  }, [toast]);
+  
+  const firebaseConfigError = getFirebaseError();
+  const displayError = error || firebaseConfigError;
 
-  const finalError = !firebaseInitialized ? (fbConfigError || "Firebase configuration error.") : error;
-
-  return { isLoading, isSaving, error: finalError, fetchSpecificEntry, saveJournalEntry, deleteJournalEntry };
+  return { isLoading, isSaving, error: displayError, fetchSpecificEntry, saveJournalEntry, deleteJournalEntry };
 }
